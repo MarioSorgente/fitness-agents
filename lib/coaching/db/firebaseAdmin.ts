@@ -1,11 +1,15 @@
-import { applicationDefault, cert, getApps, initializeApp, type App } from "firebase-admin/app";
-import { getFirestore, type Firestore } from "firebase-admin/firestore";
+import { createRequire } from "node:module";
+
+import type { App } from "firebase-admin/app";
+import type { Firestore } from "firebase-admin/firestore";
 
 type FirebaseServiceAccount = {
   projectId: string;
   clientEmail: string;
   privateKey: string;
 };
+
+const nodeRequire = createRequire(import.meta.url);
 
 let firestore: Firestore | undefined;
 
@@ -65,6 +69,9 @@ function fromIndividualEnvVars(): FirebaseServiceAccount | undefined {
 }
 
 export function getFirebaseAdminApp(): App {
+  const { applicationDefault, cert, getApps, initializeApp } = nodeRequire(
+    "firebase-admin/app",
+  ) as typeof import("firebase-admin/app");
   const [existingApp] = getApps();
 
   if (existingApp) {
@@ -91,6 +98,9 @@ export function getFirebaseFirestore(): Firestore {
     return firestore;
   }
 
+  const { getFirestore } = nodeRequire(
+    "firebase-admin/firestore",
+  ) as typeof import("firebase-admin/firestore");
   firestore = getFirestore(getFirebaseAdminApp());
 
   return firestore;
