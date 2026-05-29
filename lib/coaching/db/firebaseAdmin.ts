@@ -1,5 +1,5 @@
 import { applicationDefault, cert, getApps, initializeApp, type App } from "firebase-admin/app";
-import { getFirestore, initializeFirestore, type Firestore } from "firebase-admin/firestore";
+import { getFirestore, type Firestore } from "firebase-admin/firestore";
 
 type FirebaseServiceAccount = {
   projectId: string;
@@ -91,12 +91,7 @@ export function getFirebaseFirestore(): Firestore {
     return firestore;
   }
 
-  const existingApp = getApps()[0];
-  const app = getFirebaseAdminApp();
-
-  firestore = existingApp
-    ? getFirestore(app)
-    : initializeFirestore(app, { ignoreUndefinedProperties: true });
+  firestore = getFirestore(getFirebaseAdminApp());
 
   return firestore;
 }
