@@ -1,0 +1,43 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function hasOwnerField() {
+      return request.resource.data.userId is string;
+    }
+
+    function keepsOwnerField() {
+      return resource.data.userId == request.resource.data.userId;
+    }
+
+    match /coaching_intake_submissions/{submissionId} {
+      allow read: if isOwner(resource.data.userId);
+      allow create: if hasOwnerField() && isOwner(request.resource.data.userId);
+      allow update: if isOwner(resource.data.userId) && keepsOwnerField();
+      allow delete: if false;
+    }
+
+    match /coaching_plans/{planId} {
+      allow read: if isOwner(resource.data.userId);
+      allow create, update, delete: if false;
+    }
+
+    match /coaching_review_states/{reviewStateId} {
+      allow read: if isOwner(resource.data.userId);
+      allow create, update, delete: if false;
+    }
+
+    match /coaching_exports/{exportId} {
+      allow read: if isOwner(resource.data.userId);
+      allow create, update, delete: if false;
+    }
+  }
+}
