@@ -1,10 +1,4 @@
-import {
-  type CollectionReference,
-  type DocumentData,
-  type Firestore,
-  type Query,
-  Timestamp,
-} from "firebase-admin/firestore";
+import type { CollectionReference, DocumentData, Firestore, Query } from "firebase-admin/firestore";
 
 import {
   type CoachingExport,
@@ -27,34 +21,40 @@ const COLLECTIONS = {
   exports: "coaching_exports",
 } as const;
 
+type FirestoreDate = Date | { toDate(): Date };
+
 type StoredDocument = DocumentData & {
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
+  createdAt: FirestoreDate;
+  updatedAt: FirestoreDate;
 };
 
 type StoredIntakeSubmission = StoredDocument &
   Omit<IntakeSubmission, "createdAt" | "submittedAt" | "updatedAt"> & {
-    submittedAt?: Timestamp;
+    submittedAt?: FirestoreDate;
   };
 
 type StoredCoachingPlan = StoredDocument &
   Omit<CoachingPlan, "createdAt" | "publishedAt" | "updatedAt"> & {
-    publishedAt?: Timestamp;
+    publishedAt?: FirestoreDate;
   };
 
 type StoredReviewState = StoredDocument & Omit<ReviewState, "createdAt" | "updatedAt">;
 
 type StoredCoachingExport = StoredDocument &
   Omit<CoachingExport, "createdAt" | "expiresAt" | "updatedAt"> & {
-    expiresAt?: Timestamp;
+    expiresAt?: FirestoreDate;
   };
 
-function toTimestamp(date: Date | undefined): Timestamp | undefined {
-  return date ? Timestamp.fromDate(date) : undefined;
+function toFirestoreDate(date: Date | undefined): Date | undefined {
+  return date;
 }
 
-function toDate(timestamp: Timestamp | undefined): Date | undefined {
-  return timestamp?.toDate();
+function toDate(value: FirestoreDate | undefined): Date | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  return value instanceof Date ? value : value.toDate();
 }
 
 function stripUndefined<T extends Record<string, unknown>>(value: T): Partial<T> {
@@ -66,8 +66,8 @@ function stripUndefined<T extends Record<string, unknown>>(value: T): Partial<T>
 function mapIntakeSubmission(data: StoredIntakeSubmission): IntakeSubmission {
   return {
     ...data,
-    createdAt: data.createdAt.toDate(),
-    updatedAt: data.updatedAt.toDate(),
+    createdAt: toDate(data.createdAt) ?? new Date(0),
+    updatedAt: toDate(data.updatedAt) ?? new Date(0),
     submittedAt: toDate(data.submittedAt),
   };
 }
@@ -75,8 +75,8 @@ function mapIntakeSubmission(data: StoredIntakeSubmission): IntakeSubmission {
 function mapCoachingPlan(data: StoredCoachingPlan): CoachingPlan {
   return {
     ...data,
-    createdAt: data.createdAt.toDate(),
-    updatedAt: data.updatedAt.toDate(),
+    createdAt: toDate(data.createdAt) ?? new Date(0),
+    updatedAt: toDate(data.updatedAt) ?? new Date(0),
     publishedAt: toDate(data.publishedAt),
   };
 }
@@ -84,16 +84,16 @@ function mapCoachingPlan(data: StoredCoachingPlan): CoachingPlan {
 function mapReviewState(data: StoredReviewState): ReviewState {
   return {
     ...data,
-    createdAt: data.createdAt.toDate(),
-    updatedAt: data.updatedAt.toDate(),
+    createdAt: toDate(data.createdAt) ?? new Date(0),
+    updatedAt: toDate(data.updatedAt) ?? new Date(0),
   };
 }
 
 function mapCoachingExport(data: StoredCoachingExport): CoachingExport {
   return {
     ...data,
-    createdAt: data.createdAt.toDate(),
-    updatedAt: data.updatedAt.toDate(),
+    createdAt: toDate(data.createdAt) ?? new Date(0),
+    updatedAt: toDate(data.updatedAt) ?? new Date(0),
     expiresAt: toDate(data.expiresAt),
   };
 }
@@ -111,7 +111,7 @@ export class FirebaseCoachingRepository implements CoachingRepository {
   constructor(private readonly db: Firestore = getFirebaseFirestore()) {}
 
   async createIntakeSubmission(input: CreateIntakeSubmissionInput): Promise<IntakeSubmission> {
-    const now = Timestamp.now();
+    const now = new Date();
     const ref = this.documentRef(this.intakeSubmissions(), input.id);
     const data = stripUndefined({
       id: ref.id,
@@ -120,7 +120,7 @@ export class FirebaseCoachingRepository implements CoachingRepository {
       payload: input.payload,
       createdAt: now,
       updatedAt: now,
-      submittedAt: toTimestamp(input.submittedAt),
+      submittedAt: toFirestoreDate(input.submittedAt),
     });
 
     await ref.set(data);
@@ -148,8 +148,8 @@ export class FirebaseCoachingRepository implements CoachingRepository {
     await ref.update(
       stripUndefined({
         ...updates,
-        submittedAt: toTimestamp(updates.submittedAt),
-        updatedAt: Timestamp.now(),
+        submittedAt: toFirestoreDate(updates.submittedAt),
+        updatedAt: new Date(),
       }),
     );
 
@@ -157,7 +157,7 @@ export class FirebaseCoachingRepository implements CoachingRepository {
   }
 
   async createCoachingPlan(input: CreateCoachingPlanInput): Promise<CoachingPlan> {
-    const now = Timestamp.now();
+    const now = new Date();
     const ref = this.documentRef(this.plans(), input.id);
     const data = stripUndefined({
       id: ref.id,
@@ -168,7 +168,7 @@ export class FirebaseCoachingRepository implements CoachingRepository {
       agentOutputs: input.agentOutputs,
       createdAt: now,
       updatedAt: now,
-      publishedAt: toTimestamp(input.publishedAt),
+      publishedAt: toFirestoreDate(input.publishedAt),
     });
 
     await ref.set(data);
@@ -196,8 +196,8 @@ export class FirebaseCoachingRepository implements CoachingRepository {
     await ref.update(
       stripUndefined({
         ...updates,
-        publishedAt: toTimestamp(updates.publishedAt),
-        updatedAt: Timestamp.now(),
+        publishedAt: toFirestoreDate(updates.publishedAt),
+        updatedAt: new Date(),
       }),
     );
 
@@ -213,7 +213,7 @@ export class FirebaseCoachingRepository implements CoachingRepository {
 
   async upsertReviewState(input: UpsertReviewStateInput): Promise<ReviewState> {
     const existing = await this.getReviewState(input.planId);
-    const now = Timestamp.now();
+    const now = new Date();
     const ref = this.documentRef(this.reviewStates(), input.id ?? existing?.id);
     const data = stripUndefined({
       id: ref.id,
@@ -222,7 +222,7 @@ export class FirebaseCoachingRepository implements CoachingRepository {
       status: input.status,
       notes: input.notes,
       reviewerId: input.reviewerId,
-      createdAt: existing ? Timestamp.fromDate(existing.createdAt) : now,
+      createdAt: existing ? existing.createdAt : now,
       updatedAt: now,
     });
 
@@ -232,7 +232,7 @@ export class FirebaseCoachingRepository implements CoachingRepository {
   }
 
   async createCoachingExport(input: CreateCoachingExportInput): Promise<CoachingExport> {
-    const now = Timestamp.now();
+    const now = new Date();
     const ref = this.documentRef(this.exports(), input.id);
     const data = stripUndefined({
       id: ref.id,
@@ -244,7 +244,7 @@ export class FirebaseCoachingRepository implements CoachingRepository {
       downloadUrl: input.downloadUrl,
       createdAt: now,
       updatedAt: now,
-      expiresAt: toTimestamp(input.expiresAt),
+      expiresAt: toFirestoreDate(input.expiresAt),
     });
 
     await ref.set(data);
@@ -272,8 +272,8 @@ export class FirebaseCoachingRepository implements CoachingRepository {
     await ref.update(
       stripUndefined({
         ...updates,
-        expiresAt: toTimestamp(updates.expiresAt),
-        updatedAt: Timestamp.now(),
+        expiresAt: toFirestoreDate(updates.expiresAt),
+        updatedAt: new Date(),
       }),
     );
 
