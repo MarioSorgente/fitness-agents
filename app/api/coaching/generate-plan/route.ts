@@ -12,12 +12,14 @@ import {
   userIdSchema,
 } from "@/lib/coaching/api/routeUtils";
 import { createFirebaseCoachingRepository } from "@/lib/coaching/db/firebaseCoachingRepository";
+import { generateCoachingPlan } from "@/lib/coaching/orchestration/generateCoachingPlan";
 
 export const runtime = "nodejs";
 
 const generatePlanSchema = z.object({
   userId: userIdSchema,
   intakeSubmissionId: documentIdSchema,
+  orchestrationMode: z.enum(["test", "production"]).default("test"),
 });
 
 export async function POST(request: Request) {
@@ -30,20 +32,22 @@ export async function POST(request: Request) {
       "Intake submission",
     );
     const generatedAt = new Date();
+    const generated = await generateCoachingPlan({
+      intakePayload: intakeSubmission.payload,
+      mode: input.orchestrationMode,
+    });
 
     const plan = await repository.createCoachingPlan({
       userId: input.userId,
       intakeSubmissionId: intakeSubmission.id,
       status: "ready",
       plan: {
-        version: 1,
+        ...generated.plan,
         generatedAt: generatedAt.toISOString(),
-        source: "api/coaching/generate-plan",
-        summary: "Draft coaching plan generated from the submitted intake and pending approval.",
       },
       agentOutputs: {
+        ...generated.agentOutputs,
         generatedAt: generatedAt.toISOString(),
-        status: "placeholder_generated",
       },
     });
 

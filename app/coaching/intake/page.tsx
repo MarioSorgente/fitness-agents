@@ -69,6 +69,30 @@ export default function CoachingIntakePage() {
         </section>
 
         <section className="card stack">
+          <h2>AI orchestration mode</h2>
+          <fieldset aria-describedby="orchestration-mode-note">
+            <legend>Choose testing or production routing</legend>
+            <div className="radio-list">
+              <label className="radio-row">
+                <input defaultChecked name="orchestrationMode" type="radio" value="test" />
+                <span>Test</span>
+              </label>
+              <label className="radio-row">
+                <input name="orchestrationMode" type="radio" value="production" />
+                <span>Production</span>
+              </label>
+            </div>
+            <p className="tooltip-note" id="orchestration-mode-note" role="note">
+              Test mode runs every orchestration step on the cheapest fast route: Kimi
+              moonshot-v1-8k, then OpenAI gpt-4.1-nano, then Anthropic claude-haiku-4-5 if fallbacks
+              are needed. Production mode keeps cheap/heavy steps on that fast route and uses
+              Anthropic claude-opus-4-7 for the final moderator, with OpenAI gpt-4.1-mini then Kimi
+              moonshot-v1-32k as fallbacks.
+            </p>
+          </fieldset>
+        </section>
+
+        <section className="card stack">
           <h2>Availability and constraints</h2>
           <label>
             Days available per week
