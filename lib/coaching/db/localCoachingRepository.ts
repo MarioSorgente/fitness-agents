@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 
 import type {
@@ -15,7 +16,12 @@ import type {
   UpsertReviewStateInput,
 } from "./coachingRepository";
 
-const DEFAULT_STORE_PATH = path.join(process.cwd(), ".data", "coaching-repository.json");
+const DEFAULT_STORE_DIRECTORY = process.env.VERCEL
+  ? os.tmpdir()
+  : path.join(process.cwd(), ".data");
+const DEFAULT_STORE_PATH = path.join(DEFAULT_STORE_DIRECTORY, "coaching-repository.json");
+
+let memoryFallbackStore: LocalStore | undefined;
 
 type Serialized = Record<string, unknown>;
 
@@ -25,6 +31,18 @@ type LocalStore = {
   reviewStates: Record<string, Serialized>;
   coachingExports: Record<string, Serialized>;
 };
+
+function isFilePersistenceUnavailable(error: unknown): boolean {
+  if (!error || typeof error !== "object" || !("code" in error)) {
+    return false;
+  }
+
+  return ["EACCES", "ENOENT", "EPERM", "EROFS"].includes(String(error.code));
+}
+
+function cloneStore(store: LocalStore): LocalStore {
+  return structuredClone(store) as LocalStore;
+}
 
 function emptyStore(): LocalStore {
   return {
@@ -341,11 +359,15 @@ export class LocalFileCoachingRepository implements CoachingRepository {
   }
 
   private async loadStore(): Promise<LocalStore> {
+    if (memoryFallbackStore) {
+      return cloneStore(memoryFallbackStore);
+    }
+
     try {
       const rawStore = await readFile(this.storePath, "utf8");
       return { ...emptyStore(), ...(JSON.parse(rawStore) as Partial<LocalStore>) };
     } catch (error) {
-      if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+      if (isFilePersistenceUnavailable(error)) {
         return emptyStore();
       }
 
@@ -354,10 +376,20 @@ export class LocalFileCoachingRepository implements CoachingRepository {
   }
 
   private async saveStore(store: LocalStore): Promise<void> {
-    await mkdir(path.dirname(this.storePath), { recursive: true });
-    const temporaryPath = `${this.storePath}.${process.pid}.${Date.now()}.tmp`;
-    await writeFile(temporaryPath, `${JSON.stringify(store, null, 2)}\n`, "utf8");
-    await rename(temporaryPath, this.storePath);
+    try {
+      await mkdir(path.dirname(this.storePath), { recursive: true });
+      const temporaryPath = `${this.storePath}.${process.pid}.${Date.now()}.tmp`;
+      await writeFile(temporaryPath, `${JSON.stringify(store, null, 2)}\n`, "utf8");
+      await rename(temporaryPath, this.storePath);
+      memoryFallbackStore = undefined;
+    } catch (error) {
+      if (isFilePersistenceUnavailable(error)) {
+        memoryFallbackStore = cloneStore(store);
+        return;
+      }
+
+      throw error;
+    }
   }
 
   private async updateStore<T>(updater: (store: LocalStore) => T): Promise<T> {
