@@ -1,99 +1,523 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { type FormEvent, useState } from "react";
+import { useMemo, useState } from "react";
 
-const goals = [
-  "Build strength",
-  "Improve conditioning",
-  "Lose body fat",
-  "Move without pain",
-  "Prepare for an event",
-];
+import { type IntakeField } from "@/lib/coaching/form/intakeFields";
+import { intakeIntroCopy, intakeSections } from "@/lib/coaching/form/intakeSections";
+import { deriveSafetyStatus, type CoachingIntakeInput } from "@/lib/coaching/schemas/intakeSchema";
 
+type IntakeFormData = Record<string, unknown>;
 type SubmissionState =
   | { status: "idle" }
   | { status: "submitting" }
   | { status: "error"; message: string };
 
-function getCheckedValues(formData: FormData, name: string): string[] {
-  return formData
-    .getAll(name)
-    .map((value) => String(value).trim())
-    .filter(Boolean);
+function getDefaultValue(field: IntakeField): unknown {
+  if (field.type === "multi-select" || field.type === "repeatable_group") {
+    return [];
+  }
+  if (field.type === "field_group") {
+    return Object.fromEntries(
+      (field.fields ?? []).map((child) => [child.name, getDefaultValue(child)]),
+    );
+  }
+  if (field.type === "checkbox") {
+    return false;
+  }
+  if (field.type === "yes_no_with_explanation") {
+    return { answer: "", explanation: "" };
+  }
+  return "";
 }
 
-function getStringValue(formData: FormData, name: string): string | undefined {
-  const value = String(formData.get(name) ?? "").trim();
+function createInitialFormData(): IntakeFormData {
+  const data: IntakeFormData = {
+    orchestrationMode: "test",
+  };
 
-  return value || undefined;
+  for (const section of intakeSections) {
+    for (const field of section.fields) {
+      data[field.name] = getDefaultValue(field);
+    }
+  }
+
+  return data;
+}
+
+function getValueAtPath(source: unknown, path: string[]): unknown {
+  return path.reduce<unknown>((current, key) => {
+    if (current && typeof current === "object") {
+      return (current as Record<string, unknown>)[key];
+    }
+    return undefined;
+  }, source);
+}
+
+function setValueAtPath(source: IntakeFormData, path: string[], value: unknown): IntakeFormData {
+  const next = structuredClone(source) as IntakeFormData;
+  let cursor: Record<string, unknown> = next;
+
+  path.slice(0, -1).forEach((key, index) => {
+    const existing = cursor[key];
+    const nextKey = path[index + 1];
+    const fallback = Number.isInteger(Number(nextKey)) ? [] : {};
+    cursor[key] = existing && typeof existing === "object" ? existing : fallback;
+    cursor = cursor[key] as Record<string, unknown>;
+  });
+
+  cursor[path[path.length - 1]] = value;
+  return next;
+}
+
+function isFilled(value: unknown): boolean {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "number") {
+    return Number.isFinite(value);
+  }
+  if (typeof value === "string") {
+    return value.trim().length > 0;
+  }
+  if (Array.isArray(value)) {
+    return value.length > 0;
+  }
+  if (value && typeof value === "object" && "answer" in value) {
+    return isFilled((value as { answer?: unknown }).answer);
+  }
+  return false;
+}
+
+function cleanValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(cleanValue).filter((entry) => {
+      if (entry === undefined) return false;
+      if (Array.isArray(entry)) return entry.length > 0;
+      if (entry && typeof entry === "object") return Object.keys(entry).length > 0;
+      return true;
+    });
+  }
+
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .map(([key, entry]) => [key, cleanValue(entry)] as const)
+      .filter(([, entry]) => entry !== undefined);
+    return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+  }
+
+  if (value === "") {
+    return undefined;
+  }
+
+  return value;
+}
+
+function buildPayload(formData: IntakeFormData): CoachingIntakeInput {
+  const cleaned = cleanValue(formData) as Record<string, unknown>;
+  const safetyStatus = deriveSafetyStatus(cleaned);
+  const fullName = String(cleaned.fullName ?? "");
+  const email = String(cleaned.email ?? "");
+  const mainGoal = String(cleaned.mainGoal ?? "");
+  const secondaryGoals = Array.isArray(cleaned.secondaryGoals) ? cleaned.secondaryGoals : [];
+  const equipmentAvailable = Array.isArray(cleaned.equipmentAvailable)
+    ? cleaned.equipmentAvailable
+    : [];
+
+  return {
+    ...cleaned,
+    name: fullName,
+    goals: [mainGoal, ...secondaryGoals].filter(Boolean),
+    clientProfile: {
+      name: fullName,
+      email,
+      age: typeof cleaned.age === "number" ? cleaned.age : Number(cleaned.age),
+      trainingExperience: String(cleaned.trainingLevel ?? ""),
+      goals: [mainGoal, ...secondaryGoals].filter(
+        (goal): goal is string => typeof goal === "string",
+      ),
+      primaryGoal: mainGoal,
+      goalDescription: String(cleaned.specificGoalDescription ?? ""),
+      availability: `${cleaned.availableDaysPerWeek ?? ""} days per week, ${cleaned.sessionDurationMinutes ?? ""} minute sessions`,
+      equipment: equipmentAvailable.filter((item): item is string => typeof item === "string"),
+      constraints: [
+        cleaned.exercisesThatCausePain,
+        cleaned.movementsExercisesPositionsAvoided,
+        cleaned.knownDiagnoses,
+      ].filter((item): item is string => typeof item === "string" && item.length > 0),
+      safetySignals: safetyStatus === "clear" ? [] : [`Safety status: ${safetyStatus}`],
+      safetyStatus,
+      nutritionSignals: [cleaned.currentNutritionBehavior, cleaned.dietaryRestrictions].filter(
+        (item): item is string => typeof item === "string" && item.length > 0,
+      ),
+      missingInformation: [],
+      coachSummary: String(cleaned.desiredOutcome ?? cleaned.specificGoalDescription ?? ""),
+    },
+    safetyStatus,
+  } as CoachingIntakeInput;
+}
+
+function FieldLabel({ field }: { field: IntakeField }) {
+  return (
+    <span>
+      {field.label} {field.required ? <span className="required-mark">*</span> : null}
+    </span>
+  );
+}
+
+function FieldHelp({ field }: { field: IntakeField }) {
+  return field.helperText ? <small className="field-help">{field.helperText}</small> : null;
+}
+
+type FieldRendererProps = {
+  field: IntakeField;
+  path: string[];
+  formData: IntakeFormData;
+  setFormData: (updater: (current: IntakeFormData) => IntakeFormData) => void;
+  nesting?: number;
+};
+
+function FieldRenderer({ field, path, formData, setFormData, nesting = 0 }: FieldRendererProps) {
+  const value = getValueAtPath(formData, path);
+  const updateValue = (nextValue: unknown) => {
+    setFormData((current) => setValueAtPath(current, path, nextValue));
+  };
+  const inputId = path.join("-");
+
+  if (field.type === "field_group") {
+    return (
+      <fieldset className="sub-fieldset">
+        <legend>{field.label}</legend>
+        <div className="nested-grid">
+          {(field.fields ?? []).map((child) => (
+            <FieldRenderer
+              key={child.name}
+              field={child}
+              formData={formData}
+              nesting={nesting + 1}
+              path={[...path, child.name]}
+              setFormData={setFormData}
+            />
+          ))}
+        </div>
+      </fieldset>
+    );
+  }
+
+  if (field.type === "repeatable_group") {
+    const items = Array.isArray(value) ? value : [];
+    const canAdd = !field.maxItems || items.length < field.maxItems;
+    const addItem = () => {
+      updateValue([
+        ...items,
+        Object.fromEntries(
+          (field.fields ?? []).map((child) => [child.name, getDefaultValue(child)]),
+        ),
+      ]);
+    };
+    const removeItem = (index: number) => {
+      updateValue(items.filter((_, itemIndex) => itemIndex !== index));
+    };
+
+    return (
+      <section className="repeatable-card">
+        <div className="repeatable-heading">
+          <div>
+            <h3>{field.label}</h3>
+            <FieldHelp field={field} />
+          </div>
+          {canAdd ? (
+            <button className="secondary-button" onClick={addItem} type="button">
+              Add
+            </button>
+          ) : null}
+        </div>
+        {items.length === 0 ? <p className="muted-copy">No entries added yet.</p> : null}
+        {items.map((_, index) => (
+          <div className="repeatable-item" key={`${field.name}-${index}`}>
+            <div className="repeatable-item-heading">
+              <strong>
+                {field.label} {index + 1}
+              </strong>
+              <button className="text-button" onClick={() => removeItem(index)} type="button">
+                Remove
+              </button>
+            </div>
+            <div className="nested-grid">
+              {(field.fields ?? []).map((child) => (
+                <FieldRenderer
+                  key={child.name}
+                  field={child}
+                  formData={formData}
+                  nesting={nesting + 1}
+                  path={[...path, String(index), child.name]}
+                  setFormData={setFormData}
+                />
+              ))}
+            </div>
+          </div>
+        ))}
+      </section>
+    );
+  }
+
+  if (field.type === "checkbox") {
+    return (
+      <label className="checkbox-row consent-row" htmlFor={inputId}>
+        <input
+          checked={Boolean(value)}
+          id={inputId}
+          onChange={(event) => updateValue(event.target.checked)}
+          type="checkbox"
+        />
+        <FieldLabel field={field} />
+      </label>
+    );
+  }
+
+  if (field.type === "multi-select") {
+    const selectedValues = Array.isArray(value) ? value : [];
+    return (
+      <fieldset className="sub-fieldset">
+        <legend>
+          <FieldLabel field={field} />
+        </legend>
+        <div className="checkbox-list compact-options">
+          {(field.options ?? []).map((option) => (
+            <label className="checkbox-row" key={option.value}>
+              <input
+                checked={selectedValues.includes(option.value)}
+                onChange={(event) => {
+                  updateValue(
+                    event.target.checked
+                      ? [...selectedValues, option.value]
+                      : selectedValues.filter((item) => item !== option.value),
+                  );
+                }}
+                type="checkbox"
+              />
+              <span>{option.label}</span>
+            </label>
+          ))}
+        </div>
+        <FieldHelp field={field} />
+      </fieldset>
+    );
+  }
+
+  if (field.type === "yes_no" || field.type === "yes_no_with_explanation") {
+    const answer =
+      field.type === "yes_no_with_explanation"
+        ? ((value as { answer?: string } | undefined)?.answer ?? "")
+        : String(value ?? "");
+    const explanation =
+      field.type === "yes_no_with_explanation"
+        ? ((value as { explanation?: string } | undefined)?.explanation ?? "")
+        : "";
+    return (
+      <fieldset className="sub-fieldset">
+        <legend>
+          <FieldLabel field={field} />
+        </legend>
+        <div className="radio-list inline-options">
+          {(field.options ?? []).map((option) => (
+            <label className="radio-row" key={option.value}>
+              <input
+                checked={answer === option.value}
+                onChange={() =>
+                  field.type === "yes_no_with_explanation"
+                    ? updateValue({ answer: option.value, explanation })
+                    : updateValue(option.value)
+                }
+                type="radio"
+              />
+              <span>{option.label}</span>
+            </label>
+          ))}
+        </div>
+        {field.type === "yes_no_with_explanation" && answer === "yes" ? (
+          <label className="nested-explanation">
+            Optional context
+            <textarea
+              onChange={(event) => updateValue({ answer, explanation: event.target.value })}
+              placeholder="Share anything your coach should know."
+              rows={3}
+              value={explanation}
+            />
+          </label>
+        ) : null}
+        <FieldHelp field={field} />
+      </fieldset>
+    );
+  }
+
+  if (field.type === "textarea") {
+    return (
+      <label htmlFor={inputId}>
+        <FieldLabel field={field} />
+        <textarea
+          id={inputId}
+          maxLength={10000}
+          onChange={(event) => updateValue(event.target.value)}
+          placeholder={field.placeholder}
+          rows={4}
+          value={String(value ?? "")}
+        />
+        <FieldHelp field={field} />
+      </label>
+    );
+  }
+
+  if (field.type === "select") {
+    return (
+      <label htmlFor={inputId}>
+        <FieldLabel field={field} />
+        <select
+          id={inputId}
+          onChange={(event) => updateValue(event.target.value)}
+          value={String(value ?? "")}
+        >
+          <option value="">Choose one</option>
+          {(field.options ?? []).map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <FieldHelp field={field} />
+      </label>
+    );
+  }
+
+  return (
+    <label htmlFor={inputId}>
+      <FieldLabel field={field} />
+      <input
+        id={inputId}
+        max={field.max}
+        min={field.min}
+        onChange={(event) =>
+          updateValue(field.type === "number" ? event.target.value : event.target.value)
+        }
+        placeholder={field.placeholder}
+        type={field.type}
+        value={String(value ?? "")}
+      />
+      <FieldHelp field={field} />
+    </label>
+  );
+}
+
+function PrivacyTermsPanel() {
+  return (
+    <section className="terms-panel" aria-labelledby="privacy-terms-heading">
+      <h3 id="privacy-terms-heading">Privacy and Terms Summary</h3>
+      <p>
+        Your intake answers are used by the coaching team to review your goals, safety context,
+        training preferences, lifestyle, and nutrition habits so we can prepare coaching guidance.
+      </p>
+      <p>
+        Coaching guidance is educational wellness support. It is not medical diagnosis, medical
+        treatment, physical therapy, or emergency care. If symptoms or red flags are present, your
+        coach may recommend medical clearance before progressing.
+      </p>
+      <p>
+        By continuing, you agree that your information may be stored and reviewed for coaching
+        purposes, that you are responsible for sharing accurate updates, and that you will stop
+        exercise and seek qualified help if unusual or severe symptoms occur.
+      </p>
+    </section>
+  );
+}
+
+function collectRequiredErrors(fields: IntakeField[], data: IntakeFormData): string[] {
+  const errors: string[] = [];
+
+  for (const field of fields) {
+    if (field.required && !isFilled(data[field.name])) {
+      errors.push(field.label);
+    }
+    if (field.requiredWhen) {
+      const watched = data[field.requiredWhen.field];
+      const watchedValue =
+        typeof watched === "object" && watched !== null && "answer" in watched
+          ? (watched as { answer?: string }).answer
+          : watched;
+      if (watchedValue === field.requiredWhen.equals && !isFilled(data[field.name])) {
+        errors.push(field.label);
+      }
+    }
+  }
+
+  return errors;
 }
 
 export function CoachingIntakeForm() {
   const router = useRouter();
+  const [currentStep, setCurrentStep] = useState(0);
+  const [formData, setFormData] = useState<IntakeFormData>(() => createInitialFormData());
   const [submissionState, setSubmissionState] = useState<SubmissionState>({ status: "idle" });
+  const [stepErrors, setStepErrors] = useState<string[]>([]);
+  const currentSection = intakeSections[currentStep];
+  const progress = useMemo(
+    () => Math.round(((currentStep + 1) / intakeSections.length) * 100),
+    [currentStep],
+  );
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  function goToNextStep() {
+    const errors = collectRequiredErrors(currentSection.fields, formData);
+    if (errors.length > 0) {
+      setStepErrors(errors);
+      return;
+    }
+    setStepErrors([]);
+    setCurrentStep((step) => Math.min(step + 1, intakeSections.length - 1));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function handleSubmit() {
+    const missingRequiredFields = intakeSections.flatMap((section) =>
+      collectRequiredErrors(section.fields, formData),
+    );
+    if (missingRequiredFields.length > 0) {
+      setStepErrors(missingRequiredFields);
+      setSubmissionState({
+        status: "error",
+        message: "Please complete all required fields before submitting.",
+      });
+      return;
+    }
+
     setSubmissionState({ status: "submitting" });
-
-    const formData = new FormData(event.currentTarget);
-    const email = getStringValue(formData, "email");
-    const name = getStringValue(formData, "name");
-    const selectedGoals = getCheckedValues(formData, "goals");
-    const daysPerWeek = getStringValue(formData, "daysPerWeek");
-    const equipment = getStringValue(formData, "equipment");
-    const limitations = getStringValue(formData, "limitations");
-    const successCriteria = getStringValue(formData, "successCriteria");
+    const payload = buildPayload(formData);
 
     try {
       const response = await fetch("/api/coaching/submit-intake", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          userId: email ?? "anonymous-intake",
-          payload: {
-            name,
-            email,
-            experience: getStringValue(formData, "experience"),
-            goals: selectedGoals,
-            successCriteria,
-            daysPerWeek,
-            equipment,
-            limitations,
-            orchestrationMode: getStringValue(formData, "orchestrationMode"),
-            clientProfile: {
-              name,
-              email,
-              trainingExperience: getStringValue(formData, "experience"),
-              goals: selectedGoals,
-              availability: daysPerWeek ? `${daysPerWeek} days per week` : undefined,
-              equipment: equipment ? [equipment] : [],
-              constraints: limitations ? [limitations] : [],
-              safetySignals: limitations ? [limitations] : [],
-              nutritionSignals: [],
-              missingInformation: [],
-              coachSummary: successCriteria,
-            },
-          },
+          userId: payload.email ?? "anonymous-intake",
+          payload,
         }),
       });
-
       const result = (await response.json().catch(() => null)) as {
         data?: { submission?: { id?: string } };
-        error?: { message?: string };
+        error?: { message?: string; issues?: Array<{ path: string; message: string }> };
       } | null;
 
       if (!response.ok) {
-        throw new Error(result?.error?.message ?? "Unable to submit intake. Please try again.");
+        const issueSummary = result?.error?.issues
+          ?.map((issue) => `${issue.path}: ${issue.message}`)
+          .join("; ");
+        throw new Error(
+          issueSummary || result?.error?.message || "Unable to submit intake. Please try again.",
+        );
       }
 
       const submissionId = result?.data?.submission?.id;
-      const query = submissionId ? `?submissionId=${encodeURIComponent(submissionId)}` : "";
-
-      router.push(`/coaching/thank-you${query}`);
+      router.push(
+        `/coaching/thank-you${submissionId ? `?submissionId=${encodeURIComponent(submissionId)}` : ""}`,
+      );
     } catch (error) {
       setSubmissionState({
         status: "error",
@@ -104,118 +528,104 @@ export function CoachingIntakeForm() {
   }
 
   return (
-    <form className="card-grid" onSubmit={handleSubmit}>
-      <section className="card stack">
-        <h2>Profile</h2>
-        <label>
-          Name
-          <input name="name" placeholder="First and last name" required type="text" />
-        </label>
-        <label>
-          Email
-          <input name="email" placeholder="you@example.com" required type="email" />
-        </label>
-        <label>
-          Training experience
-          <select name="experience" required defaultValue="">
-            <option disabled value="">
-              Choose one
-            </option>
-            <option value="new">New to structured training</option>
-            <option value="intermediate">Training consistently</option>
-            <option value="advanced">Advanced or competitive</option>
-            <option value="returning">Returning after a break</option>
-          </select>
-        </label>
-      </section>
+    <section className="intake-shell">
+      <div className="intake-progress card">
+        <div>
+          <p className="eyebrow">Client intake</p>
+          <h2>{currentSection.title}</h2>
+          <p>{intakeIntroCopy}</p>
+        </div>
+        <div className="progress-meta">
+          <span>
+            Step {currentStep + 1} of {intakeSections.length}
+          </span>
+          <strong>{progress}% complete</strong>
+        </div>
+        <div className="progress-track" aria-hidden="true">
+          <span style={{ width: `${progress}%` }} />
+        </div>
+      </div>
 
-      <section className="card stack">
-        <h2>Goals</h2>
-        <fieldset>
-          <legend>Primary goal areas</legend>
-          <div className="checkbox-list">
-            {goals.map((goal) => (
-              <label key={goal} className="checkbox-row">
-                <input name="goals" type="checkbox" value={goal} />
-                <span>{goal}</span>
-              </label>
+      <form className="card stack intake-card" onSubmit={(event) => event.preventDefault()}>
+        <div className="section-heading intake-section-heading">
+          <div>
+            <p className="eyebrow">{currentSection.eyebrow}</p>
+            <h2>{currentSection.title}</h2>
+            <p>{currentSection.description}</p>
+          </div>
+          {currentSection.optional ? <span>Optional</span> : null}
+        </div>
+
+        {currentSection.id === "privacy-terms" ? <PrivacyTermsPanel /> : null}
+
+        {currentSection.id === "food-log" ? (
+          <details className="optional-panel" open={false}>
+            <summary>Add the optional food log</summary>
+            <div className="field-grid">
+              {currentSection.fields.map((field) => (
+                <FieldRenderer
+                  key={field.name}
+                  field={field}
+                  formData={formData}
+                  path={[field.name]}
+                  setFormData={setFormData}
+                />
+              ))}
+            </div>
+          </details>
+        ) : (
+          <div className="field-grid">
+            {currentSection.fields.map((field) => (
+              <FieldRenderer
+                key={field.name}
+                field={field}
+                formData={formData}
+                path={[field.name]}
+                setFormData={setFormData}
+              />
             ))}
           </div>
-        </fieldset>
-        <label>
-          What would make the next 12 weeks successful?
-          <textarea
-            name="successCriteria"
-            placeholder="Share outcomes, constraints, habits, or milestones."
-            required
-            rows={5}
-          />
-        </label>
-      </section>
+        )}
 
-      <section className="card stack">
-        <h2>AI orchestration mode</h2>
-        <fieldset aria-describedby="orchestration-mode-note">
-          <legend>Choose testing or production routing</legend>
-          <div className="radio-list">
-            <label className="radio-row">
-              <input defaultChecked name="orchestrationMode" type="radio" value="test" />
-              <span>Test</span>
-            </label>
-            <label className="radio-row">
-              <input name="orchestrationMode" type="radio" value="production" />
-              <span>Production</span>
-            </label>
+        {stepErrors.length > 0 ? (
+          <div className="warning-panel compact-warning" role="alert">
+            <strong>Please complete:</strong> {stepErrors.slice(0, 8).join(", ")}
+            {stepErrors.length > 8 ? `, and ${stepErrors.length - 8} more required fields` : ""}.
           </div>
-          <p className="tooltip-note" id="orchestration-mode-note" role="note">
-            Test mode runs every orchestration step on the cheapest fast route: Kimi moonshot-v1-8k,
-            then OpenAI gpt-4.1-nano, then Anthropic claude-haiku-4-5 if fallbacks are needed.
-            Production mode keeps cheap/heavy steps on that fast route and uses Anthropic
-            claude-opus-4-7 for the final moderator, with OpenAI gpt-4.1-mini then Kimi
-            moonshot-v1-32k as fallbacks.
-          </p>
-        </fieldset>
-      </section>
+        ) : null}
 
-      <section className="card stack">
-        <h2>Availability and constraints</h2>
-        <label>
-          Days available per week
-          <input min="1" max="7" name="daysPerWeek" required type="number" />
-        </label>
-        <label>
-          Equipment access
-          <textarea
-            name="equipment"
-            placeholder="Gym, home dumbbells, bands, bike, no equipment, etc."
-            rows={4}
-          />
-        </label>
-        <label>
-          Injuries, limitations, or medical considerations
-          <textarea
-            name="limitations"
-            placeholder="Include anything a coach should account for."
-            rows={4}
-          />
-        </label>
-      </section>
+        {submissionState.status === "error" ? (
+          <p className="error-text">{submissionState.message}</p>
+        ) : null}
 
-      <div className="form-actions">
-        <div className="stack form-status-copy">
-          <p>
-            By submitting, you confirm this information is accurate enough for a coach to review.
-          </p>
-          {submissionState.status === "error" ? (
-            <p className="error-text" role="alert">
-              {submissionState.message}
-            </p>
-          ) : null}
+        <div className="form-actions">
+          <button
+            className="secondary-button"
+            disabled={currentStep === 0 || submissionState.status === "submitting"}
+            onClick={() => {
+              setStepErrors([]);
+              setCurrentStep((step) => Math.max(0, step - 1));
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+            type="button"
+          >
+            Previous
+          </button>
+          {currentStep < intakeSections.length - 1 ? (
+            <button onClick={goToNextStep} type="button">
+              Next section
+            </button>
+          ) : (
+            <button
+              disabled={submissionState.status === "submitting"}
+              onClick={handleSubmit}
+              type="button"
+            >
+              {submissionState.status === "submitting" ? "Submitting…" : "Submit intake"}
+            </button>
+          )}
         </div>
-        <button disabled={submissionState.status === "submitting"} type="submit">
-          {submissionState.status === "submitting" ? "Submitting…" : "Submit intake"}
-        </button>
-      </div>
-    </form>
+      </form>
+    </section>
   );
 }

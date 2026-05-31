@@ -7,9 +7,9 @@ export default function CoachingIntakePage() {
         <p className="eyebrow">Coaching intake</p>
         <h1>Tell us what you want your coaching plan to solve.</h1>
         <p>
-          This intake captures the essentials Mario needs before routing your request through the
-          coaching agents. Submissions are saved through the coaching API, then queued for review
-          and plan generation.
+          This multi-step intake keeps the experience focused while capturing the goal, safety,
+          training, lifestyle, nutrition, and consent details needed for coaching review and later
+          AI plan generation.
         </p>
       </section>
 

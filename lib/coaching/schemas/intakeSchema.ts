@@ -17,6 +17,77 @@ export const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
 
 export const jsonObjectSchema: z.ZodType<JsonObject> = z.record(z.string(), jsonValueSchema);
 
+const optionalString = z.preprocess(
+  (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+  z.string().trim().max(10_000).optional(),
+);
+const requiredString = z.string().trim().min(1).max(10_000);
+const optionalDateString = optionalString;
+const yesNoSchema = z.enum(["yes", "no"]);
+const optionalYesNoSchema = yesNoSchema.optional();
+const yesNoWithExplanationSchema = z.object({
+  answer: yesNoSchema.optional(),
+  explanation: optionalString,
+});
+const requiredYesNoWithExplanationSchema = z.object({
+  answer: yesNoSchema,
+  explanation: optionalString,
+});
+const cardiovascularHistorySchema = z.object({
+  answer: yesNoSchema.optional(),
+  explanation: optionalString,
+  dateOfDiagnosis: optionalDateString,
+});
+const medicationSchema = z.object({
+  medicationName: optionalString,
+  dosage: optionalString,
+  frequency: optionalString,
+  conditionOrReason: optionalString,
+});
+const diagnosedConditionSchema = z.object({
+  conditionName: optionalString,
+  dateOfDiagnosis: optionalDateString,
+  notes: optionalString,
+});
+const painAreaSchema = z.object({
+  area: optionalString,
+  currentlyHasPain: optionalYesNoSchema,
+  hadPainPreviously: optionalYesNoSchema,
+  severity: z.coerce.number().min(0).max(10).optional(),
+  description: optionalString,
+  triggers: optionalString,
+  movementsThatMakeItWorse: optionalString,
+  movementsThatMakeItBetter: optionalString,
+  painDuringExercise: optionalString,
+  diagnosisIfAny: optionalString,
+  currentlyTreatingIt: optionalYesNoSchema,
+  treatmentDetails: optionalString,
+});
+const surgerySchema = z.object({
+  surgeryType: optionalString,
+  bodyArea: optionalString,
+  date: optionalDateString,
+  currentLimitations: optionalString,
+  notes: optionalString,
+});
+const foodLogMealSchema = z.object({
+  mealType: optionalString,
+  foodItem: optionalString,
+  brandName: optionalString,
+  quantity: optionalString,
+  unit: optionalString,
+  timeOfDay: optionalString,
+  additionalNotes: z.array(z.string()).default([]),
+});
+const foodLogDaySchema = z.object({
+  dayNumber: z.coerce.number().int().min(1).max(3).optional(),
+  date: optionalDateString,
+  meals: z.array(foodLogMealSchema).default([]),
+});
+
+export const safetyStatusSchema = z.enum(["clear", "caution", "medical_clearance_recommended"]);
+export type SafetyStatus = z.infer<typeof safetyStatusSchema>;
+
 export const compactClientProfileSchema = z
   .object({
     name: z.string().trim().min(1).max(256).optional(),
@@ -24,35 +95,287 @@ export const compactClientProfileSchema = z
     age: z.number().int().min(13).max(120).optional(),
     trainingExperience: z.string().trim().max(500).optional(),
     goals: z.array(z.string().trim().min(1).max(500)).default([]),
+    primaryGoal: z.string().trim().max(500).optional(),
+    goalDescription: z.string().trim().max(5_000).optional(),
     availability: z.string().trim().max(1_000).optional(),
     equipment: z.array(z.string().trim().min(1).max(500)).default([]),
     constraints: z.array(z.string().trim().min(1).max(1_000)).default([]),
     safetySignals: z.array(z.string().trim().min(1).max(1_000)).default([]),
+    safetyStatus: safetyStatusSchema.optional(),
     nutritionSignals: z.array(z.string().trim().min(1).max(1_000)).default([]),
     missingInformation: z.array(z.string().trim().min(1).max(1_000)).default([]),
     coachSummary: z.string().trim().max(5_000).optional(),
   })
   .catchall(jsonValueSchema);
 
-export const coachingIntakeSchema = z
+const coachingIntakeBaseSchema = z
   .object({
-    name: z.string().trim().min(1).max(256).optional(),
-    email: z.string().trim().email().max(320).optional(),
-    experience: z.string().trim().max(500).optional(),
-    goals: z
-      .union([z.string().trim().min(1).max(500), z.array(z.string().trim().min(1).max(500))])
-      .optional(),
-    successCriteria: z.string().trim().max(10_000).optional(),
+    // Legacy aliases remain optional for older submissions; new UI writes the canonical fields below.
+    name: optionalString,
+    goals: z.union([z.string(), z.array(z.string())]).optional(),
+    experience: optionalString,
     daysPerWeek: z.coerce.number().int().min(1).max(7).optional(),
-    equipment: z.string().trim().max(5_000).optional(),
-    limitations: z.string().trim().max(10_000).optional(),
+    equipment: optionalString,
+    limitations: optionalString,
+    successCriteria: optionalString,
+
+    fullName: requiredString,
+    dateOfBirth: optionalDateString,
+    age: z.coerce.number().int().min(13).max(120),
+    sex: requiredString,
+    email: z.string().trim().email().max(320),
+    phoneNumber: optionalString,
+    height: optionalString,
+    weight: optionalString,
+
+    mainGoal: requiredString,
+    specificGoalDescription: requiredString,
+    secondaryGoals: z.array(z.string()).default([]),
+    goalPriority: optionalString,
+    desiredOutcome: optionalString,
+    motivation: optionalString,
+    biggestStruggle: optionalString,
+    confidenceLevel: z.coerce.number().int().min(1).max(10).optional(),
+    mentalStateAroundTraining: optionalString,
+    preferredCoachingStyle: z.array(z.string()).default([]),
+
+    trainingLevel: requiredString,
+    currentWeeklyActivity: optionalString,
+    usedToVigorousExercise: yesNoWithExplanationSchema.optional(),
+    availableDaysPerWeek: z.coerce.number().int().min(1).max(7),
+    preferredTrainingDays: z.array(z.string()).default([]),
+    sessionDurationMinutes: z.union([z.coerce.number().int().min(1).max(240), z.literal("other")]),
+    trainingLocation: optionalString,
+    equipmentAvailable: z.array(z.string()).default([]),
+    currentProgram: optionalString,
+    previousCoachingExperience: optionalString,
+    likedExercises: optionalString,
+    dislikedExercises: optionalString,
+    exercisesThatCausePain: optionalString,
+    movementsThatFeelGood: optionalString,
+
+    diagnosedHeartConditionAndOnlySupervisedActivity: requiredYesNoWithExplanationSchema,
+    bloodPressureOrHeartMedication: requiredYesNoWithExplanationSchema,
+    chestPainDuringActivity: requiredYesNoWithExplanationSchema,
+    dizzinessOrLossOfConsciousnessLast12Months: requiredYesNoWithExplanationSchema,
+    boneJointSoftTissueProblemAggravatedByActivity: requiredYesNoWithExplanationSchema,
+    chestPainLast30Days: requiredYesNoWithExplanationSchema,
+    otherReasonNotToExercise: requiredYesNoWithExplanationSchema,
+    currentlyFeelingUnwell: yesNoWithExplanationSchema.optional(),
+    pregnancyOrPossiblePregnancy: yesNoWithExplanationSchema.optional(),
+    recentHealthChange: yesNoWithExplanationSchema.optional(),
+
+    medications: z.array(medicationSchema).default([]),
+    allergies: optionalString,
+    diagnosedHighBloodPressure: yesNoWithExplanationSchema.optional(),
+    diagnosedBoneOrJointProblem: yesNoWithExplanationSchema.optional(),
+    over65: optionalYesNoSchema,
+    experiencedChestPainExerciseOrStress: yesNoWithExplanationSchema.optional(),
+    experiencedShortnessOfBreath: yesNoWithExplanationSchema.optional(),
+    experiencedFaintingOrLightheadedness: yesNoWithExplanationSchema.optional(),
+    recentHospitalization: yesNoWithExplanationSchema.optional(),
+    orthopedicConditions: yesNoWithExplanationSchema.optional(),
+    rapidHeartbeatOrPalpitations: yesNoWithExplanationSchema.optional(),
+    reasonNotToFollowRegularProgram: yesNoWithExplanationSchema.optional(),
+    diagnosedConditions: z.array(diagnosedConditionSchema).default([]),
+
+    highBloodPressure: cardiovascularHistorySchema.optional(),
+    hypertension: cardiovascularHistorySchema.optional(),
+    highCholesterol: cardiovascularHistorySchema.optional(),
+    hyperlipidemia: cardiovascularHistorySchema.optional(),
+    heartDisease: cardiovascularHistorySchema.optional(),
+    skippedHeartbeat: cardiovascularHistorySchema.optional(),
+    heartAttack: cardiovascularHistorySchema.optional(),
+    stroke: cardiovascularHistorySchema.optional(),
+    bypassOrCardiacSurgery: cardiovascularHistorySchema.optional(),
+    angina: cardiovascularHistorySchema.optional(),
+    gout: cardiovascularHistorySchema.optional(),
+    phlebitisOrEmbolism: cardiovascularHistorySchema.optional(),
+    otherCardiovascularCondition: cardiovascularHistorySchema.optional(),
+    otherDiagnosedConditions: optionalString,
+
+    painAreas: z.array(painAreaSchema).default([]),
+    physicalLimitationsAggravatedByExercise: yesNoWithExplanationSchema.optional(),
+    movementsExercisesPositionsAvoided: optionalString,
+    toldToAvoidActivities: yesNoWithExplanationSchema.optional(),
+    surgeries: z.array(surgerySchema).default([]),
+    currentPhysioOrDoctorCare: yesNoWithExplanationSchema.optional(),
+    knownDiagnoses: optionalString,
+
+    smoking: optionalString,
+    smokingDateQuit: optionalDateString,
+    caffeine: optionalString,
+    caffeineBeverages: optionalString,
+    alcohol: optionalString,
+    sleepHours: optionalString,
+    sleepQuality: optionalString,
+    energyLevel: optionalString,
+    workActivityLevel: optionalString,
+    stressWork: optionalString,
+    stressHome: optionalString,
+    worksMoreThan40Hours: optionalYesNoSchema,
+    consistencyChallenges: z.array(z.string()).default([]),
+    currentMoodAroundFitness: optionalString,
+    bodyConfidence: optionalString,
+    accountabilityPreference: z.array(z.string()).default([]),
+    realisticPlanRequirements: optionalString,
+    anythingElseForCoach: optionalString,
+
+    foodAllergies: optionalString,
+    foodIntolerances: optionalString,
+    foodsAvoided: optionalString,
+    foodsLoved: optionalString,
+    foodsDisliked: optionalString,
+    mealsPerDay: z.coerce.number().int().min(0).max(12).optional(),
+    typicalBreakfast: optionalString,
+    typicalLunch: optionalString,
+    typicalDinner: optionalString,
+    typicalSnacks: optionalString,
+    waterIntake: optionalString,
+    currentNutritionBehavior: optionalString,
+    weightFluctuation: yesNoWithExplanationSchema.optional(),
+    recentWeightChange: yesNoWithExplanationSchema.optional(),
+    recentWeightChangeAmount: optionalString,
+    recentWeightChangeTimeframe: optionalString,
+    appetiteLevel: optionalString,
+    dietaryRestrictions: optionalString,
+
+    threeDayFoodLog: z.array(foodLogDaySchema).max(3).default([]),
+
+    privacyPolicyAccepted: z.literal(true),
+    termsAndConditionsAccepted: z.literal(true),
+
     orchestrationMode: z.enum(["test", "production"]).optional(),
+    safetyStatus: safetyStatusSchema.optional(),
     clientProfile: compactClientProfileSchema.optional(),
   })
-  .catchall(jsonValueSchema)
-  .refine((input) => Object.keys(input).length > 0, {
-    message: "Intake payload must include at least one field.",
+  .superRefine((input, context) => {
+    if (input.recentWeightChange?.answer === "yes") {
+      if (!input.recentWeightChangeAmount) {
+        context.addIssue({
+          code: "custom",
+          path: ["recentWeightChangeAmount"],
+          message: "Please add the amount of recent weight change.",
+        });
+      }
+      if (!input.recentWeightChangeTimeframe) {
+        context.addIssue({
+          code: "custom",
+          path: ["recentWeightChangeTimeframe"],
+          message: "Please add the timeframe for recent weight change.",
+        });
+      }
+    }
   });
+
+export type CoachingIntakeInput = Record<string, unknown>;
+
+function answerIsYes(value: unknown): boolean {
+  return (
+    value === "yes" ||
+    (typeof value === "object" &&
+      value !== null &&
+      "answer" in value &&
+      (value as { answer?: unknown }).answer === "yes")
+  );
+}
+
+export function deriveSafetyStatus(input: Record<string, unknown>): SafetyStatus {
+  const medicalClearanceFields = [
+    "diagnosedHeartConditionAndOnlySupervisedActivity",
+    "bloodPressureOrHeartMedication",
+    "chestPainDuringActivity",
+    "dizzinessOrLossOfConsciousnessLast12Months",
+    "chestPainLast30Days",
+    "experiencedChestPainExerciseOrStress",
+    "experiencedShortnessOfBreath",
+    "experiencedFaintingOrLightheadedness",
+    "rapidHeartbeatOrPalpitations",
+    "heartDisease",
+    "heartAttack",
+    "stroke",
+    "bypassOrCardiacSurgery",
+    "angina",
+    "recentHospitalization",
+    "pregnancyOrPossiblePregnancy",
+    "recentHealthChange",
+  ];
+
+  if (medicalClearanceFields.some((field) => answerIsYes(input[field]))) {
+    return "medical_clearance_recommended";
+  }
+
+  const cautionFields = [
+    "boneJointSoftTissueProblemAggravatedByActivity",
+    "diagnosedBoneOrJointProblem",
+    "orthopedicConditions",
+    "physicalLimitationsAggravatedByExercise",
+    "toldToAvoidActivities",
+    "currentPhysioOrDoctorCare",
+    "recentSurgery",
+  ];
+  const hasSeverePain = Array.isArray(input.painAreas)
+    ? input.painAreas.some(
+        (painArea) =>
+          typeof painArea === "object" &&
+          painArea !== null &&
+          Number((painArea as { severity?: unknown }).severity ?? 0) >= 7,
+      )
+    : false;
+  const hasRecentSurgery = Array.isArray(input.surgeries) && input.surgeries.length > 0;
+
+  return cautionFields.some((field) => answerIsYes(input[field])) ||
+    hasSeverePain ||
+    hasRecentSurgery
+    ? "caution"
+    : "clear";
+}
+
+export const coachingIntakeSchema = coachingIntakeBaseSchema.transform((input) => {
+  const safetyStatus = deriveSafetyStatus(input);
+  const successCriteria = input.desiredOutcome ?? input.specificGoalDescription;
+  const clientProfile = {
+    ...(input.clientProfile ?? {}),
+    name: input.fullName,
+    email: input.email,
+    age: input.age,
+    trainingExperience: input.trainingLevel,
+    goals: [input.mainGoal, ...input.secondaryGoals].filter(Boolean),
+    primaryGoal: input.mainGoal,
+    goalDescription: input.specificGoalDescription,
+    availability: `${input.availableDaysPerWeek} days per week, ${input.sessionDurationMinutes} minute sessions`,
+    equipment: input.equipmentAvailable,
+    constraints: [
+      input.exercisesThatCausePain,
+      input.movementsExercisesPositionsAvoided,
+      input.knownDiagnoses,
+    ].filter((value): value is string => typeof value === "string" && value.length > 0),
+    safetyStatus,
+    nutritionSignals: [input.currentNutritionBehavior, input.dietaryRestrictions].filter(
+      (value): value is string => typeof value === "string" && value.length > 0,
+    ),
+    coachSummary: input.desiredOutcome ?? input.specificGoalDescription,
+  };
+
+  return {
+    ...input,
+    name: input.fullName,
+    goals: [input.mainGoal, ...input.secondaryGoals],
+    experience: input.trainingLevel,
+    daysPerWeek: input.availableDaysPerWeek,
+    equipment: input.equipmentAvailable.join(", "),
+    limitations: [
+      input.exercisesThatCausePain,
+      input.movementsExercisesPositionsAvoided,
+      input.knownDiagnoses,
+    ]
+      .filter(Boolean)
+      .join("; "),
+    successCriteria,
+    safetyStatus,
+    clientProfile,
+  };
+});
 
 export type CompactClientProfile = z.infer<typeof compactClientProfileSchema>;
 export type CoachingIntake = z.infer<typeof coachingIntakeSchema>;
