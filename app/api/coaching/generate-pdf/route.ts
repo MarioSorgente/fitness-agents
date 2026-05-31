@@ -6,7 +6,7 @@ import {
   parseJsonBody,
   requireOwnedResource,
 } from "@/lib/coaching/api/routeUtils";
-import { createFirebaseCoachingRepository } from "@/lib/coaching/db/firebaseCoachingRepository";
+import { createCoachingRepository } from "@/lib/coaching/db/coachingRepositoryFactory";
 import { coachingPlanPdfFilename, renderCoachingPlanPdf } from "@/lib/coaching/pdf/renderPdf";
 import { pdfGenerationRequestSchema } from "@/lib/coaching/schemas/coachingPlanSchema";
 
@@ -15,7 +15,7 @@ export const runtime = "nodejs";
 export async function POST(request: Request) {
   try {
     const input = pdfGenerationRequestSchema.parse(await parseJsonBody(request));
-    const repository = createFirebaseCoachingRepository();
+    const repository = createCoachingRepository();
     const plan = requireOwnedResource(
       await repository.getCoachingPlan(input.planId),
       input.userId,

@@ -16,7 +16,7 @@ import {
   coachingRecordStatusSchema,
   reviewStatusSchema,
 } from "@/lib/coaching/schemas/coachingPlanSchema";
-import { createFirebaseCoachingRepository } from "@/lib/coaching/db/firebaseCoachingRepository";
+import { createCoachingRepository } from "@/lib/coaching/db/coachingRepositoryFactory";
 
 export const runtime = "nodejs";
 
@@ -42,7 +42,7 @@ const updatePlanSchema = z
 export async function POST(request: Request) {
   try {
     const input = updatePlanSchema.parse(await parseJsonBody(request));
-    const repository = createFirebaseCoachingRepository();
+    const repository = createCoachingRepository();
     const existingPlan = requireOwnedResource(
       await repository.getCoachingPlan(input.planId),
       input.userId,
