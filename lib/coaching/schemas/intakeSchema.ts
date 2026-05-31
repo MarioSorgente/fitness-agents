@@ -33,11 +33,6 @@ const requiredYesNoWithExplanationSchema = z.object({
   answer: yesNoSchema,
   explanation: optionalString,
 });
-const familyHistorySchema = z.object({
-  hasFamilyHistory: optionalYesNoSchema,
-  familyMember: optionalString,
-  notes: optionalString,
-});
 const cardiovascularHistorySchema = z.object({
   answer: yesNoSchema.optional(),
   explanation: optionalString,
@@ -74,14 +69,6 @@ const surgerySchema = z.object({
   date: optionalDateString,
   currentLimitations: optionalString,
   notes: optionalString,
-});
-const supplementSchema = z.object({
-  supplementName: optionalString,
-  dosage: optionalString,
-  frequency: optionalString,
-  reasonForTaking: optionalString,
-  recommendedBy: optionalString,
-  sideEffects: optionalString,
 });
 const foodLogMealSchema = z.object({
   mealType: optionalString,
@@ -138,20 +125,8 @@ const coachingIntakeBaseSchema = z
     sex: requiredString,
     email: z.string().trim().email().max(320),
     phoneNumber: optionalString,
-    address: optionalString,
-    city: optionalString,
-    stateProvince: optionalString,
-    postalCode: optionalString,
-    country: optionalString,
-    timezone: optionalString,
     height: optionalString,
     weight: optionalString,
-    employer: optionalString,
-    occupation: optionalString,
-    emergencyContactName: optionalString,
-    emergencyContactRelationship: optionalString,
-    emergencyContactPhone: optionalString,
-    emergencyContactAddress: optionalString,
 
     mainGoal: requiredString,
     specificGoalDescription: requiredString,
@@ -190,9 +165,6 @@ const coachingIntakeBaseSchema = z
     pregnancyOrPossiblePregnancy: yesNoWithExplanationSchema.optional(),
     recentHealthChange: yesNoWithExplanationSchema.optional(),
 
-    currentPhysicianName: optionalString,
-    currentPhysicianPhone: optionalString,
-    underCareOfHealthProfessional: yesNoWithExplanationSchema.optional(),
     medications: z.array(medicationSchema).default([]),
     allergies: optionalString,
     diagnosedHighBloodPressure: yesNoWithExplanationSchema.optional(),
@@ -206,18 +178,6 @@ const coachingIntakeBaseSchema = z
     rapidHeartbeatOrPalpitations: yesNoWithExplanationSchema.optional(),
     reasonNotToFollowRegularProgram: yesNoWithExplanationSchema.optional(),
     diagnosedConditions: z.array(diagnosedConditionSchema).default([]),
-
-    familyHistoryAsthma: familyHistorySchema.optional(),
-    familyHistoryRespiratoryPulmonaryConditions: familyHistorySchema.optional(),
-    familyHistoryDiabetesType1: familyHistorySchema.optional(),
-    familyHistoryDiabetesType2: familyHistorySchema.optional(),
-    familyHistoryEpilepsy: familyHistorySchema.optional(),
-    familyHistoryOsteoporosis: familyHistorySchema.optional(),
-    familyHistoryCoronaryArteryDisease: familyHistorySchema.optional(),
-    familyHistoryHeartAttack: familyHistorySchema.optional(),
-    familyHistoryHypertension: familyHistorySchema.optional(),
-    familyHistoryHighBloodPressure: familyHistorySchema.optional(),
-    familyHistoryStroke: familyHistorySchema.optional(),
 
     highBloodPressure: cardiovascularHistorySchema.optional(),
     hypertension: cardiovascularHistorySchema.optional(),
@@ -261,15 +221,6 @@ const coachingIntakeBaseSchema = z
     realisticPlanRequirements: optionalString,
     anythingElseForCoach: optionalString,
 
-    anemia: yesNoWithExplanationSchema.optional(),
-    gastrointestinalDisorder: yesNoWithExplanationSchema.optional(),
-    hypoglycemia: yesNoWithExplanationSchema.optional(),
-    thyroidDisorder: yesNoWithExplanationSchema.optional(),
-    prePostnatal: yesNoWithExplanationSchema.optional(),
-
-    specificDietPlan: yesNoWithExplanationSchema.optional(),
-    dietPlanDetails: optionalString,
-    dietPlanPrescribedBy: optionalString,
     foodAllergies: optionalString,
     foodIntolerances: optionalString,
     foodsAvoided: optionalString,
@@ -288,55 +239,17 @@ const coachingIntakeBaseSchema = z
     recentWeightChangeTimeframe: optionalString,
     appetiteLevel: optionalString,
     dietaryRestrictions: optionalString,
-    cookingAbility: optionalString,
-    eatingOutFrequency: optionalString,
-    nutritionBudgetLimitations: optionalString,
-    otherNutritionIssues: optionalString,
-
-    takesSupplements: optionalYesNoSchema,
-    supplements: z.array(supplementSchema).default([]),
-    possibleMedicationSupplementInteraction: yesNoWithExplanationSchema.optional(),
 
     threeDayFoodLog: z.array(foodLogDaySchema).max(3).default([]),
 
-    accuracyConfirmed: z.literal(true),
-    understandsNotMedicalAdvice: z.literal(true),
-    agreesToMedicalClearanceWhenNeeded: z.literal(true),
-    agreesToInformCoachOfChanges: z.literal(true),
-    understandsExerciseRisk: z.literal(true),
-    understandsStopRules: z.literal(true),
-    dataProcessingConsent: z.literal(true),
-    liabilityWaiverAccepted: z.literal(true),
-    marketingConsent: z.boolean().default(false),
-    printedName: requiredString,
-    typedSignature: requiredString,
-    dateSigned: requiredString,
-    isUnder18: optionalYesNoSchema,
-    parentGuardianName: optionalString,
-    parentGuardianSignature: optionalString,
+    privacyPolicyAccepted: z.literal(true),
+    termsAndConditionsAccepted: z.literal(true),
 
     orchestrationMode: z.enum(["test", "production"]).optional(),
     safetyStatus: safetyStatusSchema.optional(),
     clientProfile: compactClientProfileSchema.optional(),
   })
-  .catchall(jsonValueSchema)
   .superRefine((input, context) => {
-    if (input.isUnder18 === "yes") {
-      if (!input.parentGuardianName) {
-        context.addIssue({
-          code: "custom",
-          path: ["parentGuardianName"],
-          message: "Parent or guardian name is required when the client is under 18.",
-        });
-      }
-      if (!input.parentGuardianSignature) {
-        context.addIssue({
-          code: "custom",
-          path: ["parentGuardianSignature"],
-          message: "Parent or guardian signature is required when the client is under 18.",
-        });
-      }
-    }
     if (input.recentWeightChange?.answer === "yes") {
       if (!input.recentWeightChangeAmount) {
         context.addIssue({
@@ -350,22 +263,6 @@ const coachingIntakeBaseSchema = z
           code: "custom",
           path: ["recentWeightChangeTimeframe"],
           message: "Please add the timeframe for recent weight change.",
-        });
-      }
-    }
-    if (input.specificDietPlan?.answer === "yes") {
-      if (!input.dietPlanDetails) {
-        context.addIssue({
-          code: "custom",
-          path: ["dietPlanDetails"],
-          message: "Please list the diet plan.",
-        });
-      }
-      if (!input.dietPlanPrescribedBy) {
-        context.addIssue({
-          code: "custom",
-          path: ["dietPlanPrescribedBy"],
-          message: "Please add who recommended the diet plan.",
         });
       }
     }
@@ -416,7 +313,6 @@ export function deriveSafetyStatus(input: Record<string, unknown>): SafetyStatus
     "toldToAvoidActivities",
     "currentPhysioOrDoctorCare",
     "recentSurgery",
-    "underCareOfHealthProfessional",
   ];
   const hasSeverePain = Array.isArray(input.painAreas)
     ? input.painAreas.some(
@@ -455,11 +351,9 @@ export const coachingIntakeSchema = coachingIntakeBaseSchema.transform((input) =
       input.knownDiagnoses,
     ].filter((value): value is string => typeof value === "string" && value.length > 0),
     safetyStatus,
-    nutritionSignals: [
-      input.currentNutritionBehavior,
-      input.dietaryRestrictions,
-      input.otherNutritionIssues,
-    ].filter((value): value is string => typeof value === "string" && value.length > 0),
+    nutritionSignals: [input.currentNutritionBehavior, input.dietaryRestrictions].filter(
+      (value): value is string => typeof value === "string" && value.length > 0,
+    ),
     coachSummary: input.desiredOutcome ?? input.specificGoalDescription,
   };
 

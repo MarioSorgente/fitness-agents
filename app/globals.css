@@ -505,3 +505,21 @@ button:disabled {
     grid-column: 1 / -1;
   }
 }
+
+.terms-panel {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 1rem;
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+}
+
+.terms-panel h3,
+.terms-panel p {
+  margin: 0;
+}
+
+.terms-panel p {
+  color: var(--muted);
+}

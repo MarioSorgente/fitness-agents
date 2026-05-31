@@ -71,6 +71,7 @@ export const coachingStyleOptions = [
 export const trainingLevelOptions = [
   option("beginner"),
   option("intermediate"),
+  option("advanced"),
   option("returning_after_long_break"),
   option("returning_after_injury"),
 ] as const;
@@ -216,20 +217,6 @@ export const appetiteLevelOptions = [
   option("normal"),
   option("high"),
   option("variable"),
-] as const;
-
-export const cookingAbilityOptions = [
-  option("no_cooking"),
-  option("basic"),
-  option("comfortable"),
-  option("advanced"),
-] as const;
-
-export const eatingOutFrequencyOptions = [
-  option("rarely"),
-  option("few_times_per_month"),
-  option("few_times_per_week"),
-  option("daily_or_almost_daily"),
 ] as const;
 
 export const mealTypeOptions = [

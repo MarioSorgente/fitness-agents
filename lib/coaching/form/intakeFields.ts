@@ -3,9 +3,7 @@ import {
   appetiteLevelOptions,
   coachingStyleOptions,
   consistencyChallengeOptions,
-  cookingAbilityOptions,
   daysPerWeekOptions,
-  eatingOutFrequencyOptions,
   energyLevelOptions,
   equipmentOptions,
   foodLogNoteOptions,
@@ -60,20 +58,6 @@ export type IntakeField = {
   fields?: IntakeField[];
 };
 
-export const familyHistoryFields = [
-  "familyHistoryAsthma",
-  "familyHistoryRespiratoryPulmonaryConditions",
-  "familyHistoryDiabetesType1",
-  "familyHistoryDiabetesType2",
-  "familyHistoryEpilepsy",
-  "familyHistoryOsteoporosis",
-  "familyHistoryCoronaryArteryDisease",
-  "familyHistoryHeartAttack",
-  "familyHistoryHypertension",
-  "familyHistoryHighBloodPressure",
-  "familyHistoryStroke",
-] as const;
-
 export const cardiovascularHistoryFields = [
   "highBloodPressure",
   "hypertension",
@@ -88,14 +72,6 @@ export const cardiovascularHistoryFields = [
   "gout",
   "phlebitisOrEmbolism",
   "otherCardiovascularCondition",
-] as const;
-
-export const dietaryMetabolicFields = [
-  "anemia",
-  "gastrointestinalDisorder",
-  "hypoglycemia",
-  "thyroidDisorder",
-  "prePostnatal",
 ] as const;
 
 function humanizeFieldName(name: string): string {
@@ -117,12 +93,6 @@ export const aboutYouFields: IntakeField[] = [
   { name: "sex", label: "Sex", type: "select", required: true, options: sexOptions },
   { name: "email", label: "Email", type: "email", required: true },
   { name: "phoneNumber", label: "Phone number", type: "text" },
-  { name: "address", label: "Address", type: "text" },
-  { name: "city", label: "City", type: "text" },
-  { name: "stateProvince", label: "State / Province", type: "text" },
-  { name: "postalCode", label: "ZIP / Postal code", type: "text" },
-  { name: "country", label: "Country", type: "text" },
-  { name: "timezone", label: "Timezone", type: "text", placeholder: "Example: America/New_York" },
   {
     name: "height",
     label: "Height",
@@ -135,12 +105,6 @@ export const aboutYouFields: IntakeField[] = [
     type: "text",
     helperText: "Use your preferred unit, such as 75 kg or 165 lb.",
   },
-  { name: "employer", label: "Employer", type: "text" },
-  { name: "occupation", label: "Occupation", type: "text" },
-  { name: "emergencyContactName", label: "Emergency contact full name", type: "text" },
-  { name: "emergencyContactRelationship", label: "Emergency contact relationship", type: "text" },
-  { name: "emergencyContactPhone", label: "Emergency contact phone number", type: "text" },
-  { name: "emergencyContactAddress", label: "Emergency contact address", type: "text" },
 ];
 
 export const goalFields: IntakeField[] = [
@@ -307,12 +271,6 @@ export const healthSafetyFields: IntakeField[] = [
 ];
 
 export const medicalHistoryFields: IntakeField[] = [
-  { name: "currentPhysicianName", label: "Current physician name", type: "text" },
-  { name: "currentPhysicianPhone", label: "Current physician phone number", type: "text" },
-  yesNoWithExplanation(
-    "underCareOfHealthProfessional",
-    "Are you currently under the care of a physician, chiropractor, physiotherapist, or other health professional?",
-  ),
   {
     name: "medications",
     label: "Medications",
@@ -372,18 +330,6 @@ export const medicalHistoryFields: IntakeField[] = [
       { name: "notes", label: "Notes", type: "text" },
     ],
   },
-  ...familyHistoryFields.map(
-    (name): IntakeField => ({
-      name,
-      label: humanizeFieldName(name),
-      type: "field_group",
-      fields: [
-        yesNo("hasFamilyHistory", "Family history?"),
-        { name: "familyMember", label: "Family member", type: "text" },
-        { name: "notes", label: "Notes", type: "text" },
-      ],
-    }),
-  ),
   ...cardiovascularHistoryFields.map(
     (name): IntakeField => yesNoWithExplanation(name, humanizeFieldName(name)),
   ),
@@ -523,23 +469,7 @@ export const lifestyleMindsetFields: IntakeField[] = [
   },
 ];
 
-export const nutritionSupplementFields: IntakeField[] = [
-  ...dietaryMetabolicFields.map(
-    (name): IntakeField => yesNoWithExplanation(name, humanizeFieldName(name)),
-  ),
-  yesNoWithExplanation("specificDietPlan", "Are you currently on a specific food or diet plan?"),
-  {
-    name: "dietPlanDetails",
-    label: "If yes, please list the diet plan",
-    type: "textarea",
-    requiredWhen: { field: "specificDietPlan", equals: "yes" },
-  },
-  {
-    name: "dietPlanPrescribedBy",
-    label: "Who prescribed or recommended it?",
-    type: "text",
-    requiredWhen: { field: "specificDietPlan", equals: "yes" },
-  },
+export const nutritionFields: IntakeField[] = [
   { name: "foodAllergies", label: "Food allergies", type: "textarea" },
   { name: "foodIntolerances", label: "Food intolerances", type: "textarea" },
   { name: "foodsAvoided", label: "Foods you avoid", type: "textarea" },
@@ -586,46 +516,6 @@ export const nutritionSupplementFields: IntakeField[] = [
     options: appetiteLevelOptions,
   },
   { name: "dietaryRestrictions", label: "Dietary restrictions", type: "textarea" },
-  {
-    name: "cookingAbility",
-    label: "Cooking ability",
-    type: "select",
-    options: cookingAbilityOptions,
-  },
-  {
-    name: "eatingOutFrequency",
-    label: "How often do you eat out or order food?",
-    type: "select",
-    options: eatingOutFrequencyOptions,
-  },
-  {
-    name: "nutritionBudgetLimitations",
-    label: "Any budget limitations around food?",
-    type: "textarea",
-  },
-  {
-    name: "otherNutritionIssues",
-    label: "Other food or nutrition issues you want to include",
-    type: "textarea",
-  },
-  yesNo("takesSupplements", "Do you currently take dietary supplements?"),
-  {
-    name: "supplements",
-    label: "Current supplements",
-    type: "repeatable_group",
-    fields: [
-      { name: "supplementName", label: "Supplement name", type: "text" },
-      { name: "dosage", label: "Dosage", type: "text" },
-      { name: "frequency", label: "Frequency", type: "text" },
-      { name: "reasonForTaking", label: "Reason for taking", type: "text" },
-      { name: "recommendedBy", label: "Recommended by", type: "text" },
-      { name: "sideEffects", label: "Side effects", type: "text" },
-    ],
-  },
-  yesNoWithExplanation(
-    "possibleMedicationSupplementInteraction",
-    "Are you taking medication or do you have any condition that may interact with supplements?",
-  ),
 ];
 
 export const foodLogFields: IntakeField[] = [
@@ -662,80 +552,18 @@ export const foodLogFields: IntakeField[] = [
   },
 ];
 
-export const consentFields: IntakeField[] = [
+export const privacyTermsFields: IntakeField[] = [
   {
-    name: "accuracyConfirmed",
-    label: "I confirm that the information I provided is accurate and complete.",
+    name: "privacyPolicyAccepted",
+    label: "I have read and agree to the Privacy Policy.",
     type: "checkbox",
     required: true,
   },
   {
-    name: "understandsNotMedicalAdvice",
-    label:
-      "I understand that this coaching service provides fitness, mobility, nutrition, and wellness guidance, not medical diagnosis or treatment.",
+    name: "termsAndConditionsAccepted",
+    label: "I have read and agree to the Terms and Conditions.",
     type: "checkbox",
     required: true,
-  },
-  {
-    name: "agreesToMedicalClearanceWhenNeeded",
-    label:
-      "I understand that I am responsible for consulting a physician or qualified health professional before starting exercise if I have medical concerns, symptoms, or red flags.",
-    type: "checkbox",
-    required: true,
-  },
-  {
-    name: "agreesToInformCoachOfChanges",
-    label:
-      "I agree to inform my coach of any physical limitations, pain, medical conditions, injuries, or health changes before and during the program.",
-    type: "checkbox",
-    required: true,
-  },
-  {
-    name: "understandsExerciseRisk",
-    label: "I understand that exercise involves risk and I agree to follow instructions carefully.",
-    type: "checkbox",
-    required: true,
-  },
-  {
-    name: "understandsStopRules",
-    label:
-      "I understand that if I experience chest pain, fainting, severe shortness of breath, severe pain, neurological symptoms, or unusual symptoms, I should stop exercising and seek medical help.",
-    type: "checkbox",
-    required: true,
-  },
-  {
-    name: "dataProcessingConsent",
-    label:
-      "I consent to my information being stored and reviewed by the coaching team for the purpose of creating my plan.",
-    type: "checkbox",
-    required: true,
-  },
-  {
-    name: "liabilityWaiverAccepted",
-    label: "I agree to the coaching terms and liability waiver.",
-    type: "checkbox",
-    required: true,
-  },
-  {
-    name: "marketingConsent",
-    label: "I agree to receive optional updates, offers, or coaching content.",
-    type: "checkbox",
-  },
-  { name: "printedName", label: "Printed name", type: "text", required: true },
-  { name: "typedSignature", label: "Typed signature", type: "text", required: true },
-  { name: "dateSigned", label: "Date signed", type: "date", required: true },
-  yesNo("isUnder18", "Are you under 18?"),
-  {
-    name: "parentGuardianName",
-    label: "Parent or guardian name, if under 18",
-    type: "text",
-    requiredWhen: { field: "isUnder18", equals: "yes" },
-  },
-  {
-    name: "parentGuardianSignature",
-    label: "Parent or guardian typed signature, if under 18",
-    type: "text",
-    requiredWhen: { field: "isUnder18", equals: "yes" },
   },
 ];
 
@@ -747,9 +575,9 @@ export const intakeFields = [
   ...medicalHistoryFields,
   ...painInjuryFields,
   ...lifestyleMindsetFields,
-  ...nutritionSupplementFields,
+  ...nutritionFields,
   ...foodLogFields,
-  ...consentFields,
+  ...privacyTermsFields,
 ] as const;
 
 export const requiredIntakeFieldNames = intakeFields

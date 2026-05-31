@@ -1,12 +1,12 @@
 import {
   aboutYouFields,
-  consentFields,
+  privacyTermsFields,
   foodLogFields,
   goalFields,
   healthSafetyFields,
   lifestyleMindsetFields,
   medicalHistoryFields,
-  nutritionSupplementFields,
+  nutritionFields,
   painInjuryFields,
   trainingBackgroundFields,
   type IntakeField,
@@ -81,12 +81,12 @@ export const intakeSections: IntakeSection[] = [
     fields: lifestyleMindsetFields,
   },
   {
-    id: "nutrition-supplements",
+    id: "nutrition",
     eyebrow: "Step 8",
-    title: "Nutrition and Supplements",
+    title: "Nutrition",
     description:
-      "Capture nutrition habits, dietary factors, and supplement context without making this feel like a diet audit.",
-    fields: nutritionSupplementFields,
+      "Capture nutrition habits and dietary context without making this feel like a diet audit.",
+    fields: nutritionFields,
   },
   {
     id: "food-log",
@@ -98,11 +98,11 @@ export const intakeSections: IntakeSection[] = [
     collapsible: true,
   },
   {
-    id: "consent-confirmation",
+    id: "privacy-terms",
     eyebrow: "Step 10",
-    title: "Consent and Confirmation",
+    title: "Privacy and Terms",
     description:
-      "Please confirm the details are accurate and that you understand coaching is guidance, not medical care.",
-    fields: consentFields,
+      "Review the privacy and terms summary, then agree to continue with coaching review.",
+    fields: privacyTermsFields,
   },
 ];

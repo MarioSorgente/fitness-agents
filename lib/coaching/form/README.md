@@ -15,15 +15,15 @@ The exported field groups mirror the intake experience:
 - `medicalHistoryFields`
 - `painInjuryFields`
 - `lifestyleMindsetFields`
-- `nutritionSupplementFields`
+- `nutritionFields`
 - `foodLogFields`
-- `consentFields`
+- `privacyTermsFields`
 
 The React form at `app/coaching/intake/CoachingIntakeForm.tsx` renders these definitions and should not be used as the source of truth for questions.
 
 ## Where to edit options
 
-Edit `lib/coaching/form/intakeOptions.ts` for select, multi-select, Yes/No, pain area, food log, nutrition, supplement, lifestyle, and training option lists.
+Edit `lib/coaching/form/intakeOptions.ts` for select, multi-select, Yes/No, pain area, food log, nutrition, lifestyle, and training option lists.
 
 If an option list changes, update it in this file and reference it from `intakeFields.ts`.
 
@@ -36,8 +36,8 @@ This Zod schema validates the saved `CoachingIntake` payload, including:
 - required text fields such as `fullName`, `email`, `mainGoal`, and `specificGoalDescription`
 - numeric ranges such as age, confidence, and pain severity
 - required PAR-Q answers
-- consent checkboxes that must be accepted
-- conditional validation for under-18 guardian signatures, recent weight change details, and specific diet plan details
+- privacy and terms checkboxes that must be accepted
+- conditional validation for recent weight change details
 - the derived `safetyStatus` saved with each intake
 
 ## Where required fields are defined

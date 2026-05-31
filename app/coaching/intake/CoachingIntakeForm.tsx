@@ -13,10 +13,6 @@ type SubmissionState =
   | { status: "submitting" }
   | { status: "error"; message: string };
 
-function todayIsoDate(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
 function getDefaultValue(field: IntakeField): unknown {
   if (field.type === "multi-select" || field.type === "repeatable_group") {
     return [];
@@ -38,12 +34,11 @@ function getDefaultValue(field: IntakeField): unknown {
 function createInitialFormData(): IntakeFormData {
   const data: IntakeFormData = {
     orchestrationMode: "test",
-    dateSigned: todayIsoDate(),
   };
 
   for (const section of intakeSections) {
     for (const field of section.fields) {
-      data[field.name] = field.name === "dateSigned" ? todayIsoDate() : getDefaultValue(field);
+      data[field.name] = getDefaultValue(field);
     }
   }
 
@@ -413,6 +408,28 @@ function FieldRenderer({ field, path, formData, setFormData, nesting = 0 }: Fiel
   );
 }
 
+function PrivacyTermsPanel() {
+  return (
+    <section className="terms-panel" aria-labelledby="privacy-terms-heading">
+      <h3 id="privacy-terms-heading">Privacy and Terms Summary</h3>
+      <p>
+        Your intake answers are used by the coaching team to review your goals, safety context,
+        training preferences, lifestyle, and nutrition habits so we can prepare coaching guidance.
+      </p>
+      <p>
+        Coaching guidance is educational wellness support. It is not medical diagnosis, medical
+        treatment, physical therapy, or emergency care. If symptoms or red flags are present, your
+        coach may recommend medical clearance before progressing.
+      </p>
+      <p>
+        By continuing, you agree that your information may be stored and reviewed for coaching
+        purposes, that you are responsible for sharing accurate updates, and that you will stop
+        exercise and seek qualified help if unusual or severe symptoms occur.
+      </p>
+    </section>
+  );
+}
+
 function collectRequiredErrors(fields: IntakeField[], data: IntakeFormData): string[] {
   const errors: string[] = [];
 
@@ -538,6 +555,8 @@ export function CoachingIntakeForm() {
           </div>
           {currentSection.optional ? <span>Optional</span> : null}
         </div>
+
+        {currentSection.id === "privacy-terms" ? <PrivacyTermsPanel /> : null}
 
         {currentSection.id === "food-log" ? (
           <details className="optional-panel" open={false}>
