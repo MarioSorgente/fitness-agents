@@ -1,25 +1,28 @@
-import React from "react";
-import { Text, View } from "@react-pdf/renderer";
-
-import { pdfStyles } from "../pdfTheme";
 import type { JsonObject, JsonValue } from "../../schemas/intakeSchema";
-import { BulletList, Section, getStringList, stringifyJson } from "./Section";
+import {
+  bulletListBlock,
+  compactBlocks,
+  createSection,
+  getStringList,
+  stringifyJson,
+  textBlock,
+  type PdfSectionBlock,
+} from "./Section";
 
-function renderTrainingBlock(value: JsonValue): React.ReactNode {
+function trainingBlocks(value: JsonValue): PdfSectionBlock[] {
   if (Array.isArray(value)) {
-    return <BulletList items={value.map((item) => stringifyJson(item)).filter(Boolean)} />;
+    return [bulletListBlock(value.map((item) => stringifyJson(item)).filter(Boolean))];
   }
 
   if (value && typeof value === "object") {
-    return Object.entries(value).map(([key, entry]) => (
-      <View key={key} style={pdfStyles.panel}>
-        <Text style={pdfStyles.subheading}>{key}</Text>
-        <Text>{stringifyJson(entry)}</Text>
-      </View>
-    ));
+    return Object.entries(value).map(([key, entry]) => ({
+      type: "text",
+      variant: "body",
+      text: `${key}: ${stringifyJson(entry)}`,
+    }));
   }
 
-  return <Text>{stringifyJson(value)}</Text>;
+  return compactBlocks([textBlock(stringifyJson(value))]);
 }
 
 export function TrainingSection({ content }: { content: JsonObject }) {
@@ -31,15 +34,15 @@ export function TrainingSection({ content }: { content: JsonObject }) {
     "trainingProgression",
   ]);
 
-  return (
-    <Section eyebrow="Training" title="Training plan">
-      {training ? (
-        renderTrainingBlock(training)
-      ) : (
-        <Text style={pdfStyles.muted}>No training plan provided.</Text>
-      )}
-      <Text style={pdfStyles.subheading}>Progression notes</Text>
-      <BulletList items={progression} />
-    </Section>
+  return createSection(
+    "Training plan",
+    compactBlocks([
+      ...(training
+        ? trainingBlocks(training)
+        : compactBlocks([textBlock("No training plan provided.", "muted")])),
+      textBlock("Progression notes", "subheading"),
+      bulletListBlock(progression),
+    ]),
+    "Training",
   );
 }

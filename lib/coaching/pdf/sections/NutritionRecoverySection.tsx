@@ -1,9 +1,12 @@
-import React from "react";
-import { Text } from "@react-pdf/renderer";
-
-import { pdfStyles } from "../pdfTheme";
 import type { JsonObject } from "../../schemas/intakeSchema";
-import { BulletList, Section, getStringList, getText } from "./Section";
+import {
+  bulletListBlock,
+  compactBlocks,
+  createSection,
+  getStringList,
+  getText,
+  textBlock,
+} from "./Section";
 
 export function NutritionRecoverySection({ content }: { content: JsonObject }) {
   const nutritionText = getText(content, ["nutrition", "nutritionGuidance", "fueling"]);
@@ -16,20 +19,21 @@ export function NutritionRecoverySection({ content }: { content: JsonObject }) {
     "modifications",
   ]);
 
-  return (
-    <Section eyebrow="Support" title="Nutrition, recovery, and safety">
-      <Text style={pdfStyles.subheading}>Nutrition</Text>
-      <Text style={nutritionText ? pdfStyles.body : pdfStyles.muted}>
-        {nutritionText || "No nutrition guidance provided."}
-      </Text>
-      <Text style={pdfStyles.subheading}>Recovery</Text>
-      <Text style={recoveryText ? pdfStyles.body : pdfStyles.muted}>
-        {recoveryText || "No recovery guidance provided."}
-      </Text>
-      <Text style={pdfStyles.subheading}>Habits</Text>
-      <BulletList items={habits} />
-      <Text style={pdfStyles.subheading}>Safety notes</Text>
-      <BulletList items={safety} />
-    </Section>
+  return createSection(
+    "Nutrition, recovery, and safety",
+    compactBlocks([
+      textBlock("Nutrition", "subheading"),
+      textBlock(
+        nutritionText || "No nutrition guidance provided.",
+        nutritionText ? "body" : "muted",
+      ),
+      textBlock("Recovery", "subheading"),
+      textBlock(recoveryText || "No recovery guidance provided.", recoveryText ? "body" : "muted"),
+      textBlock("Habits", "subheading"),
+      bulletListBlock(habits),
+      textBlock("Safety notes", "subheading"),
+      bulletListBlock(safety),
+    ]),
+    "Support",
   );
 }

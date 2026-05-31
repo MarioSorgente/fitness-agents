@@ -1,14 +1,11 @@
-import React from "react";
-import { Document, Page, Text, View } from "@react-pdf/renderer";
-
 import type { CoachingPlan, PdfGenerationRequest } from "../schemas/coachingPlanSchema";
-import { pdfStyles } from "./pdfTheme";
 import {
   AppendixSection,
   CoverSection,
   NutritionRecoverySection,
   PlanSummarySection,
   TrainingSection,
+  type PdfSection,
 } from "./sections";
 
 export type CoachingPlanPdfProps = {
@@ -16,35 +13,29 @@ export type CoachingPlanPdfProps = {
   request: PdfGenerationRequest;
 };
 
-function PageFooter({ planId }: { planId: string }) {
-  return (
-    <View fixed style={pdfStyles.footer}>
-      <Text>Coaching plan {planId}</Text>
-      <Text render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`} />
-    </View>
-  );
-}
+export type CoachingPlanPdfDocument = {
+  title: string;
+  author: string;
+  subject: string;
+  sections: PdfSection[];
+};
 
-export function CoachingPlanPdf({ plan, request }: CoachingPlanPdfProps) {
+export function CoachingPlanPdf({ plan, request }: CoachingPlanPdfProps): CoachingPlanPdfDocument {
   const content = plan.plan.content;
+  const appendix = request.includeAppendix
+    ? AppendixSection({ agentOutputs: plan.agentOutputs })
+    : null;
 
-  return (
-    <Document
-      author="Fitness Agents"
-      subject="Approved coaching plan"
-      title={`Coaching plan ${plan.id}`}
-    >
-      <Page size="LETTER" style={pdfStyles.coverPage}>
-        <CoverSection plan={plan} request={request} />
-        <PageFooter planId={plan.id} />
-      </Page>
-      <Page size="LETTER" style={pdfStyles.page}>
-        <PlanSummarySection content={content} />
-        <TrainingSection content={content} />
-        <NutritionRecoverySection content={content} />
-        {request.includeAppendix ? <AppendixSection agentOutputs={plan.agentOutputs} /> : null}
-        <PageFooter planId={plan.id} />
-      </Page>
-    </Document>
-  );
+  return {
+    title: `Coaching plan ${plan.id}`,
+    author: "Fitness Agents",
+    subject: "Approved coaching plan",
+    sections: [
+      CoverSection({ plan, request }),
+      PlanSummarySection({ content }),
+      TrainingSection({ content }),
+      NutritionRecoverySection({ content }),
+      ...(appendix ? [appendix] : []),
+    ],
+  };
 }

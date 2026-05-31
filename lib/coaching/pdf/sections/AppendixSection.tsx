@@ -1,9 +1,5 @@
-import React from "react";
-import { Text, View } from "@react-pdf/renderer";
-
-import { pdfStyles } from "../pdfTheme";
 import type { CoachingAgentOutputs } from "../../schemas/coachingPlanSchema";
-import { Section } from "./Section";
+import { compactBlocks, createSection, textBlock } from "./Section";
 
 export function AppendixSection({
   agentOutputs,
@@ -14,11 +10,11 @@ export function AppendixSection({
     return null;
   }
 
-  return (
-    <Section eyebrow="Appendix" title="Review appendix">
-      <View style={pdfStyles.codeBlock}>
-        <Text>{JSON.stringify(agentOutputs.panelBrief ?? agentOutputs, null, 2)}</Text>
-      </View>
-    </Section>
+  return createSection(
+    "Review appendix",
+    compactBlocks([
+      textBlock(JSON.stringify(agentOutputs.panelBrief ?? agentOutputs, null, 2), "code"),
+    ]),
+    "Appendix",
   );
 }

@@ -1,53 +1,57 @@
-import React from "react";
-import { Text, View } from "@react-pdf/renderer";
-
-import { pdfStyles } from "../pdfTheme";
 import type { JsonObject, JsonValue } from "../../schemas/intakeSchema";
 
-export type SectionProps = {
-  title: string;
-  eyebrow?: string;
-  children: React.ReactNode;
+export type PdfTextBlock = {
+  type: "text";
+  text: string;
+  variant?: "body" | "muted" | "subheading" | "code";
 };
 
-export function Section({ title, eyebrow, children }: SectionProps) {
-  return (
-    <View style={pdfStyles.section} wrap={false}>
-      {eyebrow ? <Text style={pdfStyles.eyebrow}>{eyebrow}</Text> : null}
-      <Text style={pdfStyles.heading}>{title}</Text>
-      {children}
-    </View>
-  );
+export type PdfBulletListBlock = {
+  type: "bullets";
+  items: string[];
+};
+
+export type PdfKeyValueBlock = {
+  type: "keyValue";
+  entries: Array<[string, string]>;
+};
+
+export type PdfSection = {
+  title: string;
+  eyebrow?: string;
+  blocks: PdfSectionBlock[];
+};
+
+export type PdfSectionBlock = PdfTextBlock | PdfBulletListBlock | PdfKeyValueBlock;
+
+export function createSection(
+  title: string,
+  blocks: PdfSectionBlock[],
+  eyebrow?: string,
+): PdfSection {
+  return { title, eyebrow, blocks };
 }
 
-export function BulletList({ items }: { items: string[] }) {
-  if (items.length === 0) {
-    return <Text style={pdfStyles.muted}>No details provided.</Text>;
-  }
-
-  return (
-    <View style={pdfStyles.list}>
-      {items.map((item, index) => (
-        <View key={`${item}-${index}`} style={pdfStyles.listItem}>
-          <Text style={pdfStyles.bullet}>•</Text>
-          <Text style={pdfStyles.listItemText}>{item}</Text>
-        </View>
-      ))}
-    </View>
-  );
+export function textBlock(
+  text: string,
+  variant: PdfTextBlock["variant"] = "body",
+): PdfTextBlock | null {
+  return text.trim() ? { type: "text", text, variant } : null;
 }
 
-export function KeyValueList({ entries }: { entries: Array<[string, string]> }) {
-  return (
-    <View style={pdfStyles.panel}>
-      {entries.map(([label, value]) => (
-        <View key={label} style={{ marginBottom: 5 }}>
-          <Text style={pdfStyles.smallCaps}>{label}</Text>
-          <Text>{value || "Not provided"}</Text>
-        </View>
-      ))}
-    </View>
-  );
+export function bulletListBlock(items: string[]): PdfBulletListBlock {
+  return { type: "bullets", items: items.length > 0 ? items : ["No details provided."] };
+}
+
+export function keyValueBlock(entries: Array<[string, string]>): PdfKeyValueBlock {
+  return {
+    type: "keyValue",
+    entries: entries.map(([label, value]) => [label, value || "Not provided"]),
+  };
+}
+
+export function compactBlocks(blocks: Array<PdfSectionBlock | null>): PdfSectionBlock[] {
+  return blocks.filter((block): block is PdfSectionBlock => Boolean(block));
 }
 
 export function stringifyJson(value: JsonValue | undefined): string {
