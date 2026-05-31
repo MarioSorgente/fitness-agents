@@ -1,15 +1,14 @@
 import { NextResponse } from "next/server";
+
 import {
   ApiRouteError,
   handleRouteError,
   parseJsonBody,
   requireOwnedResource,
-  serializeCoachingExport,
-  serializeCoachingPlan,
-  serializeReviewState,
 } from "@/lib/coaching/api/routeUtils";
-import { pdfGenerationRequestSchema } from "@/lib/coaching/schemas/coachingPlanSchema";
 import { createFirebaseCoachingRepository } from "@/lib/coaching/db/firebaseCoachingRepository";
+import { coachingPlanPdfFilename, renderCoachingPlanPdf } from "@/lib/coaching/pdf/renderPdf";
+import { pdfGenerationRequestSchema } from "@/lib/coaching/schemas/coachingPlanSchema";
 
 export const runtime = "nodejs";
 
@@ -32,25 +31,18 @@ export async function POST(request: Request) {
       );
     }
 
-    const queuedAt = new Date();
-    const coachingExport = await repository.createCoachingExport({
-      userId: input.userId,
-      planId: plan.id,
-      type: "pdf",
-      status: "queued",
-      storagePath: `coaching/plans/${plan.id}/exports/${queuedAt.getTime()}.pdf`,
-    });
+    const pdfBuffer = await renderCoachingPlanPdf(plan, input);
+    const filename = coachingPlanPdfFilename(plan);
 
-    return NextResponse.json(
-      {
-        data: {
-          plan: serializeCoachingPlan(plan),
-          reviewState: serializeReviewState(reviewState),
-          export: serializeCoachingExport(coachingExport),
-        },
+    return new NextResponse(new Uint8Array(pdfBuffer), {
+      headers: {
+        "Cache-Control": "private, no-store",
+        "Content-Disposition": `attachment; filename="${filename}"`,
+        "Content-Length": String(pdfBuffer.byteLength),
+        "Content-Type": "application/pdf",
       },
-      { status: 202 },
-    );
+      status: 200,
+    });
   } catch (error) {
     return handleRouteError(error);
   }
