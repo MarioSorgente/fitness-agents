@@ -11,7 +11,7 @@ import {
   serializeReviewState,
   userIdSchema,
 } from "@/lib/coaching/api/routeUtils";
-import { createFirebaseCoachingRepository } from "@/lib/coaching/db/firebaseCoachingRepository";
+import { createCoachingRepository } from "@/lib/coaching/db/coachingRepositoryFactory";
 import { generateCoachingPlan } from "@/lib/coaching/orchestration/generateCoachingPlan";
 
 export const runtime = "nodejs";
@@ -25,7 +25,7 @@ const generatePlanSchema = z.object({
 export async function POST(request: Request) {
   try {
     const input = generatePlanSchema.parse(await parseJsonBody(request));
-    const repository = createFirebaseCoachingRepository();
+    const repository = createCoachingRepository();
     const intakeSubmission = requireOwnedResource(
       await repository.getIntakeSubmission(input.intakeSubmissionId),
       input.userId,
