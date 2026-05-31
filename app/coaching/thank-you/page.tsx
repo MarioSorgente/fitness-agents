@@ -1,15 +1,26 @@
 import Link from "next/link";
 
-export default function CoachingThankYouPage() {
+type CoachingThankYouPageProps = {
+  searchParams: Promise<{
+    submissionId?: string;
+  }>;
+};
+
+export default async function CoachingThankYouPage({ searchParams }: CoachingThankYouPageProps) {
+  const { submissionId } = await searchParams;
+
   return (
     <main className="page-shell narrow-shell">
       <section className="hero-panel stack">
         <p className="eyebrow">Intake received</p>
         <h1>Thank you — your coaching intake is ready for review.</h1>
         <p>
-          In v1, this page confirms the intake flow and sets expectations while persistence,
-          notifications, and plan generation are connected behind the scenes.
+          Your submission has been saved and can now move into coaching-plan generation, review, and
+          PDF export when the backend environment is configured.
         </p>
+        {submissionId ? (
+          <p className="submission-reference">Submission reference: {submissionId}</p>
+        ) : null}
       </section>
 
       <section className="card stack">
@@ -19,9 +30,14 @@ export default function CoachingThankYouPage() {
           <li>The coaching agents draft a training plan from your goals and constraints.</li>
           <li>A human review pass approves the plan before it is shared with you.</li>
         </ol>
-        <Link className="button-link" href="/coaching/intake">
-          Submit another intake
-        </Link>
+        <div className="button-row">
+          <Link className="button-link" href="/coaching/intake">
+            Submit another intake
+          </Link>
+          <Link className="secondary-link" href="/">
+            Back home
+          </Link>
+        </div>
       </section>
     </main>
   );
