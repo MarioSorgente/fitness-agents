@@ -3,11 +3,11 @@ import { z } from "zod";
 
 import {
   handleRouteError,
-  jsonObjectSchema,
   parseJsonBody,
   serializeIntakeSubmission,
   userIdSchema,
 } from "@/lib/coaching/api/routeUtils";
+import { coachingIntakeSchema } from "@/lib/coaching/schemas/intakeSchema";
 import { createFirebaseCoachingRepository } from "@/lib/coaching/db/firebaseCoachingRepository";
 
 export const runtime = "nodejs";
@@ -15,7 +15,7 @@ export const runtime = "nodejs";
 const submitIntakeSchema = z.object({
   id: z.string().trim().min(1).max(256).optional(),
   userId: userIdSchema,
-  payload: jsonObjectSchema,
+  payload: coachingIntakeSchema,
 });
 
 export async function POST(request: Request) {

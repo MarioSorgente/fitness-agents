@@ -4,27 +4,29 @@ import { z } from "zod";
 import {
   documentIdSchema,
   handleRouteError,
-  jsonObjectSchema,
   parseJsonBody,
   requireOwnedResource,
   serializeCoachingPlan,
   serializeReviewState,
   userIdSchema,
 } from "@/lib/coaching/api/routeUtils";
+import {
+  coachingAgentOutputsSchema,
+  coachingPlanContentSchema,
+  coachingRecordStatusSchema,
+  reviewStatusSchema,
+} from "@/lib/coaching/schemas/coachingPlanSchema";
 import { createFirebaseCoachingRepository } from "@/lib/coaching/db/firebaseCoachingRepository";
 
 export const runtime = "nodejs";
-
-const recordStatusSchema = z.enum(["draft", "queued", "running", "ready", "failed", "archived"]);
-const reviewStatusSchema = z.enum(["not_started", "in_review", "approved", "changes_requested"]);
 
 const updatePlanSchema = z
   .object({
     userId: userIdSchema,
     planId: documentIdSchema,
-    plan: jsonObjectSchema.optional(),
-    agentOutputs: jsonObjectSchema.optional(),
-    status: recordStatusSchema.optional(),
+    plan: coachingPlanContentSchema.optional(),
+    agentOutputs: coachingAgentOutputsSchema.optional(),
+    status: coachingRecordStatusSchema.optional(),
     review: z
       .object({
         status: reviewStatusSchema,

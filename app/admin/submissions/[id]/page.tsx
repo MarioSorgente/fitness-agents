@@ -1,13 +1,26 @@
 import Link from "next/link";
 
-const demoSubmissionDetails = {
+import type { CompactClientProfile } from "@/lib/coaching/schemas/intakeSchema";
+
+type AdminSubmissionDetails = CompactClientProfile & {
+  email: string;
+  status: string;
+  submittedAt: string;
+  notes: string;
+};
+
+const demoSubmissionDetails: AdminSubmissionDetails = {
   name: "Alex Rivera",
   email: "alex@example.com",
   status: "Ready for review",
   submittedAt: "May 29, 2026",
   goals: ["Build strength", "Move without pain"],
   availability: "4 days per week",
-  equipment: "Commercial gym, dumbbells at home, stationary bike",
+  equipment: ["Commercial gym", "Dumbbells at home", "Stationary bike"],
+  constraints: ["Prefers morning sessions", "Travel twice per month"],
+  safetySignals: ["Knee-friendly lower-body progressions needed"],
+  nutritionSignals: [],
+  missingInformation: [],
   notes:
     "Prefers morning sessions, wants knee-friendly lower-body progressions, and needs short travel workouts twice per month.",
 };
@@ -62,7 +75,7 @@ export default async function AdminSubmissionDetailPage({ params }: SubmissionDe
           </div>
           <div>
             <dt>Equipment</dt>
-            <dd>{demoSubmissionDetails.equipment}</dd>
+            <dd>{demoSubmissionDetails.equipment.join(", ")}</dd>
           </div>
           <div>
             <dt>Coach notes</dt>

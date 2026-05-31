@@ -1,29 +1,21 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
-
 import {
   ApiRouteError,
-  documentIdSchema,
   handleRouteError,
   parseJsonBody,
   requireOwnedResource,
   serializeCoachingExport,
   serializeCoachingPlan,
   serializeReviewState,
-  userIdSchema,
 } from "@/lib/coaching/api/routeUtils";
+import { pdfGenerationRequestSchema } from "@/lib/coaching/schemas/coachingPlanSchema";
 import { createFirebaseCoachingRepository } from "@/lib/coaching/db/firebaseCoachingRepository";
 
 export const runtime = "nodejs";
 
-const generatePdfSchema = z.object({
-  userId: userIdSchema,
-  planId: documentIdSchema,
-});
-
 export async function POST(request: Request) {
   try {
-    const input = generatePdfSchema.parse(await parseJsonBody(request));
+    const input = pdfGenerationRequestSchema.parse(await parseJsonBody(request));
     const repository = createFirebaseCoachingRepository();
     const plan = requireOwnedResource(
       await repository.getCoachingPlan(input.planId),
