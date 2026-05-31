@@ -75,13 +75,21 @@ export function createCoachingRepository(db?: Firestore): CoachingRepository {
       console.info(`[coaching repo] using FirebaseCoachingRepository (${choice.reason})`);
       return repo;
     } catch (error) {
-      if (error instanceof FirebaseConfigError && !choice.explicit) {
-        console.warn(
-          `[coaching repo] Firebase auto-detect failed (${error.message}); falling back to LocalFileCoachingRepository.`,
-        );
-        return new LocalFileCoachingRepository();
+      if (choice.explicit) {
+        // User explicitly asked for Firebase — surface the real error.
+        throw error;
       }
-      throw error;
+
+      const reason =
+        error instanceof FirebaseConfigError
+          ? `config error: ${error.message}`
+          : error instanceof Error
+            ? `${error.name}: ${error.message}`
+            : String(error);
+      console.warn(
+        `[coaching repo] Firebase auto-detect failed (${reason}); falling back to LocalFileCoachingRepository. Set COACHING_REPOSITORY=local to silence this warning.`,
+      );
+      return new LocalFileCoachingRepository();
     }
   }
 
