@@ -340,3 +340,168 @@ button:disabled {
     grid-template-columns: minmax(0, 1.35fr) minmax(260px, 0.65fr);
   }
 }
+
+.intake-shell {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.intake-progress {
+  display: grid;
+  gap: 1rem;
+}
+
+.progress-meta {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-weight: 700;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+
+.progress-track {
+  background: #e5e7eb;
+  border-radius: 999px;
+  height: 0.65rem;
+  overflow: hidden;
+}
+
+.progress-track span {
+  background: linear-gradient(90deg, var(--accent), #14b8a6);
+  display: block;
+  height: 100%;
+  transition: width 180ms ease;
+}
+
+.intake-card {
+  overflow: hidden;
+}
+
+.intake-section-heading {
+  align-items: flex-start;
+}
+
+.field-grid,
+.nested-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.field-help,
+.muted-copy {
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 400;
+}
+
+.required-mark {
+  color: #dc2626;
+}
+
+.sub-fieldset,
+.repeatable-card,
+.optional-panel {
+  background: #fbfaf7;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  padding: 1rem;
+}
+
+.compact-options {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.inline-options {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.nested-explanation {
+  margin-top: 1rem;
+}
+
+.repeatable-card {
+  display: grid;
+  gap: 1rem;
+}
+
+.repeatable-heading,
+.repeatable-item-heading {
+  align-items: center;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.repeatable-heading h3 {
+  margin: 0;
+}
+
+.repeatable-item {
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 0.9rem;
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.secondary-button {
+  background: #e0ecff;
+  color: var(--accent-dark);
+}
+
+.secondary-button:hover {
+  background: #c7dcff;
+}
+
+.text-button {
+  background: transparent;
+  color: var(--accent-dark);
+  padding: 0;
+}
+
+.text-button:hover {
+  background: transparent;
+  text-decoration: underline;
+}
+
+.consent-row {
+  background: #fbfaf7;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  padding: 1rem;
+}
+
+.optional-panel summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.optional-panel .field-grid {
+  margin-top: 1rem;
+}
+
+.compact-warning {
+  box-shadow: none;
+  padding: 1rem;
+}
+
+@media (min-width: 760px) {
+  .field-grid,
+  .nested-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .field-grid > .sub-fieldset,
+  .field-grid > .repeatable-card,
+  .field-grid > label:has(textarea),
+  .nested-grid > .sub-fieldset,
+  .nested-grid > .repeatable-card,
+  .nested-grid > label:has(textarea) {
+    grid-column: 1 / -1;
+  }
+}
