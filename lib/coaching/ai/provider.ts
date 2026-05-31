@@ -57,35 +57,111 @@ export const CHEAP_OR_HEAVY_STEPS: readonly CoachingStepId[] = [
 
 export const FINAL_MODERATOR_STEP: CoachingStepId = "final_moderator";
 
-export const CHEAP_STEP_PRODUCTION_ROUTE: readonly CoachingStepRoute[] = [
-  { provider: "kimi", model: "moonshot-v1-8k", tier: "fast" },
-  { provider: "openai", model: "gpt-4.1-nano", tier: "fast" },
-  { provider: "anthropic", model: "claude-haiku-4-5", tier: "fast" },
-] as const;
+const DEFAULT_MODELS: Record<CoachingAiProviderId, Record<CoachingModelTier, string>> = {
+  anthropic: {
+    fast: "claude-haiku-4-5",
+    main: "claude-opus-4-7",
+  },
+  kimi: {
+    fast: "moonshot-v1-8k",
+    main: "moonshot-v1-32k",
+  },
+  openai: {
+    fast: "gpt-4.1-nano",
+    main: "gpt-4.1-mini",
+  },
+};
 
-export const FINAL_MODERATOR_PRODUCTION_ROUTE: readonly CoachingStepRoute[] = [
-  { provider: "anthropic", model: "claude-opus-4-7", tier: "main" },
-  { provider: "openai", model: "gpt-4.1-mini", tier: "main" },
-  { provider: "kimi", model: "moonshot-v1-32k", tier: "main" },
-] as const;
+const MODEL_ENV_NAMES: Record<CoachingAiProviderId, Record<CoachingModelTier, string>> = {
+  anthropic: {
+    fast: "ANTHROPIC_MODEL_FAST",
+    main: "ANTHROPIC_MODEL_MAIN",
+  },
+  kimi: {
+    fast: "KIMI_MODEL_FAST",
+    main: "KIMI_MODEL_MAIN",
+  },
+  openai: {
+    fast: "OPENAI_MODEL_FAST",
+    main: "OPENAI_MODEL_MAIN",
+  },
+};
 
-export const TEST_ROUTE: readonly CoachingStepRoute[] = [
-  { provider: "kimi", model: "moonshot-v1-8k", tier: "fast" },
-  { provider: "openai", model: "gpt-4.1-nano", tier: "fast" },
-  { provider: "anthropic", model: "claude-haiku-4-5", tier: "fast" },
-] as const;
+const CHEAP_STEP_PROVIDER_ORDER: readonly CoachingAiProviderId[] = ["kimi", "openai", "anthropic"];
+const DEFAULT_PREMIUM_SYNTHESIS_PROVIDER_ORDER: readonly CoachingAiProviderId[] = [
+  "anthropic",
+  "openai",
+  "kimi",
+];
+
+function isCoachingAiProviderId(value: string | undefined): value is CoachingAiProviderId {
+  return value === "anthropic" || value === "kimi" || value === "openai";
+}
+
+function getConfiguredModel(provider: CoachingAiProviderId, tier: CoachingModelTier): string {
+  const envValue = process.env[MODEL_ENV_NAMES[provider][tier]];
+
+  const configuredModel = envValue?.trim();
+
+  return configuredModel || DEFAULT_MODELS[provider][tier];
+}
+
+function routeFor(provider: CoachingAiProviderId, tier: CoachingModelTier): CoachingStepRoute {
+  return {
+    provider,
+    model: getConfiguredModel(provider, tier),
+    tier,
+  };
+}
+
+function withPreferredProvider(
+  providerOrder: readonly CoachingAiProviderId[],
+  preferredProvider: CoachingAiProviderId,
+): CoachingAiProviderId[] {
+  return [preferredProvider, ...providerOrder.filter((provider) => provider !== preferredProvider)];
+}
+
+function getPremiumSynthesisProviderOrder(): CoachingAiProviderId[] {
+  const preferredProvider = process.env.AI_PROVIDER?.trim().toLowerCase();
+
+  if (!isCoachingAiProviderId(preferredProvider)) {
+    return [...DEFAULT_PREMIUM_SYNTHESIS_PROVIDER_ORDER];
+  }
+
+  return withPreferredProvider(DEFAULT_PREMIUM_SYNTHESIS_PROVIDER_ORDER, preferredProvider);
+}
+
+export function getCheapStepProductionRoute(): CoachingStepRoute[] {
+  return CHEAP_STEP_PROVIDER_ORDER.map((provider) => routeFor(provider, "fast"));
+}
+
+export function getFinalModeratorProductionRoute(): CoachingStepRoute[] {
+  return getPremiumSynthesisProviderOrder().map((provider) => routeFor(provider, "main"));
+}
+
+export function getTestRoute(): CoachingStepRoute[] {
+  return CHEAP_STEP_PROVIDER_ORDER.map((provider) => routeFor(provider, "fast"));
+}
+
+export const CHEAP_STEP_PRODUCTION_ROUTE: readonly CoachingStepRoute[] =
+  getCheapStepProductionRoute();
+
+export const FINAL_MODERATOR_PRODUCTION_ROUTE: readonly CoachingStepRoute[] =
+  getFinalModeratorProductionRoute();
+
+export const TEST_ROUTE: readonly CoachingStepRoute[] = getTestRoute();
 
 export function getRoutesForStep(
   step: CoachingStepId,
   mode: CoachingOrchestrationMode,
 ): readonly CoachingStepRoute[] {
   if (mode === "test") {
-    return TEST_ROUTE;
+    return getTestRoute();
   }
 
   return step === FINAL_MODERATOR_STEP
-    ? FINAL_MODERATOR_PRODUCTION_ROUTE
-    : CHEAP_STEP_PRODUCTION_ROUTE;
+    ? getFinalModeratorProductionRoute()
+    : getCheapStepProductionRoute();
 }
 
 export async function runRoutedCompletion(
