@@ -124,6 +124,7 @@ function objectValue(value: JsonValue | null): JsonObject {
 
 function stepRunToExpertOutput(run: StepRun): ExpertOutput {
   const parsed = objectValue(safeJsonParse(run.content));
+  const parsedJson = Object.keys(parsed).length > 0;
 
   return expertOutputSchema.parse({
     ...parsed,
@@ -131,25 +132,34 @@ function stepRunToExpertOutput(run: StepRun): ExpertOutput {
     title: run.title,
     provider: run.provider,
     model: run.model,
-    findings: normalizeStringArray(parsed.findings),
+    findings: parsedJson
+      ? normalizeStringArray(parsed.findings)
+      : [`${run.title} returned non-JSON content; raw content is retained for coach review.`],
     recommendations: normalizeStringArray(parsed.recommendations),
     risks: normalizeStringArray(parsed.risks),
-    followUps: normalizeStringArray(parsed.followUps),
+    followUps: parsedJson
+      ? normalizeStringArray(parsed.followUps)
+      : ["Review this agent output manually before relying on it."],
     content: run.content,
+    validationStatus: parsedJson ? "parsed" : "fallback_non_json",
   });
 }
 
 function stepRunToPanelBrief(run: StepRun, expertOutputs: ExpertOutput[]): PanelBrief {
   const parsed = objectValue(safeJsonParse(run.content));
+  const parsedJson = Object.keys(parsed).length > 0;
 
   return panelBriefSchema.parse({
     ...parsed,
-    agreements: normalizeStringArray(parsed.agreements),
+    agreements: parsedJson
+      ? normalizeStringArray(parsed.agreements)
+      : ["Panel brief returned non-JSON content; raw content is retained for coach review."],
     conflicts: normalizeStringArray(parsed.conflicts),
     safetyGates: normalizeStringArray(parsed.safetyGates),
     planDirection: normalizeStringArray(parsed.planDirection),
     expertOutputs,
     content: run.content,
+    validationStatus: parsedJson ? "parsed" : "fallback_non_json",
   });
 }
 
@@ -185,7 +195,7 @@ export async function generateCoachingPlan({
         {
           role: "system",
           content:
-            "You compress coaching intakes into a privacy-minimized structured brief. Preserve safety-relevant facts, goals, constraints, equipment, schedule, and missing information. Do not invent details.",
+            "You compress coaching intakes into a privacy-minimized structured brief. Preserve safety-relevant facts, goals, constraints, equipment, schedule, and missing information. Do not invent details. Return a single valid JSON object only with no markdown or commentary.",
         },
         {
           role: "user",
@@ -211,7 +221,7 @@ export async function generateCoachingPlan({
       messages: [
         {
           role: "system",
-          content: `You are the ${expert.title} in a coaching plan panel. ${expert.instruction} Return concise JSON with keys: findings, recommendations, risks, followUps.`,
+          content: `You are the ${expert.title} in a coaching plan panel. ${expert.instruction} Return one strict JSON object only with keys: findings, recommendations, risks, followUps. Do not wrap the JSON in markdown.`,
         },
         {
           role: "user",
@@ -235,7 +245,7 @@ export async function generateCoachingPlan({
         {
           role: "system",
           content:
-            "You merge expert panel notes into a concise moderator brief. Highlight agreements, conflicts, safety gates, and the safest actionable plan direction. Return JSON.",
+            "You merge expert panel notes into a concise moderator brief. Highlight agreements, conflicts, safety gates, and the safest actionable plan direction. Return one strict JSON object only with no markdown or commentary.",
         },
         {
           role: "user",
@@ -260,7 +270,7 @@ export async function generateCoachingPlan({
         {
           role: "system",
           content:
-            "You are the final coaching plan moderator. Create a safe, practical, review-ready coaching plan from the compressed intake and panel brief. Include safety disclaimers where needed. Return JSON only.",
+            "You are the final coaching plan moderator. Create a safe, practical, review-ready coaching plan from the compressed intake and panel brief. Include safety disclaimers where needed. Return one strict JSON object only with no markdown or commentary.",
         },
         {
           role: "user",
@@ -286,7 +296,12 @@ export async function generateCoachingPlan({
       content:
         Object.keys(objectValue(finalPlan)).length > 0
           ? objectValue(finalPlan)
-          : { planText: finalModerator.content },
+          : {
+              planText: finalModerator.content,
+              validationStatus: "fallback_non_json",
+              warning:
+                "Final moderator returned non-JSON content; raw content is retained for coach review.",
+            },
     }),
     agentOutputs: coachingAgentOutputsSchema.parse({
       status: "generated",
