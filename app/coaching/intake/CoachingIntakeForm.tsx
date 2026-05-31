@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 
 import { type IntakeField } from "@/lib/coaching/form/intakeFields";
 import { intakeIntroCopy, intakeSections } from "@/lib/coaching/form/intakeSections";
+import { sampleIntakeFormData } from "@/lib/coaching/form/sampleIntake";
 import { deriveSafetyStatus, type CoachingIntakeInput } from "@/lib/coaching/schemas/intakeSchema";
 
 type IntakeFormData = Record<string, unknown>;
@@ -475,6 +476,57 @@ export function CoachingIntakeForm() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  async function submitFormData(data: IntakeFormData) {
+    setSubmissionState({ status: "submitting" });
+    const payload = buildPayload(data);
+
+    try {
+      const response = await fetch("/api/coaching/submit-intake", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: payload.email ?? "anonymous-intake",
+          payload,
+        }),
+      });
+      const result = (await response.json().catch(() => null)) as {
+        data?: { submission?: { id?: string } };
+        error?: {
+          message?: string;
+          issues?: Array<{ path: string; message: string }>;
+          details?: { name?: string; message?: string };
+        };
+      } | null;
+
+      if (!response.ok) {
+        const issueSummary = result?.error?.issues
+          ?.map((issue) => `${issue.path}: ${issue.message}`)
+          .join("; ");
+        const baseMessage =
+          issueSummary ||
+          result?.error?.message ||
+          "Unable to submit intake. Please try again.";
+        const detailSuffix = result?.error?.details?.message
+          ? ` (${result.error.details.name ?? "Error"}: ${result.error.details.message})`
+          : "";
+        throw new Error(`${baseMessage}${detailSuffix}`);
+      }
+
+      const submissionId = result?.data?.submission?.id;
+      const userId = payload.email ?? "anonymous-intake";
+      const params = new URLSearchParams();
+      if (submissionId) params.set("submissionId", submissionId);
+      params.set("userId", String(userId));
+      router.push(`/coaching/thank-you?${params.toString()}`);
+    } catch (error) {
+      setSubmissionState({
+        status: "error",
+        message:
+          error instanceof Error ? error.message : "Unable to submit intake. Please try again.",
+      });
+    }
+  }
+
   async function handleSubmit() {
     const missingRequiredFields = intakeSections.flatMap((section) =>
       collectRequiredErrors(section.fields, formData),
@@ -488,47 +540,44 @@ export function CoachingIntakeForm() {
       return;
     }
 
-    setSubmissionState({ status: "submitting" });
-    const payload = buildPayload(formData);
+    await submitFormData(formData);
+  }
 
-    try {
-      const response = await fetch("/api/coaching/submit-intake", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: payload.email ?? "anonymous-intake",
-          payload,
-        }),
-      });
-      const result = (await response.json().catch(() => null)) as {
-        data?: { submission?: { id?: string } };
-        error?: { message?: string; issues?: Array<{ path: string; message: string }> };
-      } | null;
-
-      if (!response.ok) {
-        const issueSummary = result?.error?.issues
-          ?.map((issue) => `${issue.path}: ${issue.message}`)
-          .join("; ");
-        throw new Error(
-          issueSummary || result?.error?.message || "Unable to submit intake. Please try again.",
-        );
-      }
-
-      const submissionId = result?.data?.submission?.id;
-      router.push(
-        `/coaching/thank-you${submissionId ? `?submissionId=${encodeURIComponent(submissionId)}` : ""}`,
-      );
-    } catch (error) {
-      setSubmissionState({
-        status: "error",
-        message:
-          error instanceof Error ? error.message : "Unable to submit intake. Please try again.",
-      });
-    }
+  async function handleQuickSubmit() {
+    const sample = { ...createInitialFormData(), ...sampleIntakeFormData } as IntakeFormData;
+    setFormData(sample);
+    setStepErrors([]);
+    await submitFormData(sample);
   }
 
   return (
     <section className="intake-shell">
+      <div
+        className="card stack"
+        style={{
+          background: "rgba(255, 221, 87, 0.12)",
+          border: "1px dashed rgba(255, 200, 0, 0.5)",
+          padding: "12px 16px",
+          marginBottom: "16px",
+        }}
+      >
+        <strong>Test helpers</strong>
+        <div className="button-row">
+          <button
+            type="button"
+            onClick={handleQuickSubmit}
+            disabled={submissionState.status === "submitting"}
+          >
+            {submissionState.status === "submitting"
+              ? "Submitting…"
+              : "Quick submit (sample)"}
+          </button>
+        </div>
+        <small className="muted-copy">
+          Fills the form with valid sample data and submits in one click. Always visible while
+          we iterate.
+        </small>
+      </div>
       <div className="intake-progress card">
         <div>
           <p className="eyebrow">Client intake</p>

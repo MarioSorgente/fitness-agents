@@ -3,11 +3,16 @@ import { createRequire } from "node:module";
 import type { App } from "firebase-admin/app";
 import type { Firestore } from "firebase-admin/firestore";
 
+import { FirebaseConfigError } from "../api/routeUtils";
+
 type FirebaseServiceAccount = {
   projectId: string;
   clientEmail: string;
   privateKey: string;
 };
+
+const REMEDIATION_HINT =
+  "Fix the env var, unset it, or set COACHING_REPOSITORY=local to use the in-memory store.";
 
 const nodeRequire = createRequire(import.meta.url);
 
@@ -20,7 +25,7 @@ function fromServiceAccountJson(): FirebaseServiceAccount | undefined {
     return undefined;
   }
 
-  const parsed = JSON.parse(rawServiceAccount) as {
+  let parsed: {
     project_id?: string;
     projectId?: string;
     client_email?: string;
@@ -28,14 +33,22 @@ function fromServiceAccountJson(): FirebaseServiceAccount | undefined {
     private_key?: string;
     privateKey?: string;
   };
+  try {
+    parsed = JSON.parse(rawServiceAccount);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new FirebaseConfigError(
+      `FIREBASE_SERVICE_ACCOUNT_KEY is set but is not valid JSON (${reason}). ${REMEDIATION_HINT}`,
+    );
+  }
 
   const projectId = parsed.project_id ?? parsed.projectId;
   const clientEmail = parsed.client_email ?? parsed.clientEmail;
   const privateKey = parsed.private_key ?? parsed.privateKey;
 
   if (!projectId || !clientEmail || !privateKey) {
-    throw new Error(
-      "FIREBASE_SERVICE_ACCOUNT_KEY must include project_id, client_email, and private_key.",
+    throw new FirebaseConfigError(
+      `FIREBASE_SERVICE_ACCOUNT_KEY must include project_id, client_email, and private_key. ${REMEDIATION_HINT}`,
     );
   }
 
@@ -56,8 +69,8 @@ function fromIndividualEnvVars(): FirebaseServiceAccount | undefined {
   }
 
   if (!projectId || !clientEmail || !privateKey) {
-    throw new Error(
-      "FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY must be set together.",
+    throw new FirebaseConfigError(
+      `FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY must be set together. ${REMEDIATION_HINT}`,
     );
   }
 

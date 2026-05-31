@@ -16,6 +16,7 @@ export const userIdSchema = z.string().trim().min(1).max(256);
 
 export type ApiErrorCode =
   | "BAD_REQUEST"
+  | "FIREBASE_CONFIG"
   | "FORBIDDEN"
   | "INTERNAL_ERROR"
   | "METHOD_NOT_ALLOWED"
@@ -31,6 +32,10 @@ type ApiErrorBody = {
       path: string;
       message: string;
     }>;
+    details?: {
+      name: string;
+      message: string;
+    };
   };
 };
 
@@ -44,11 +49,19 @@ export class ApiRouteError extends Error {
   }
 }
 
+export class FirebaseConfigError extends ApiRouteError {
+  constructor(message: string) {
+    super("FIREBASE_CONFIG", message, 500);
+    this.name = "FirebaseConfigError";
+  }
+}
+
 export function errorResponse(
   code: ApiErrorCode,
   message: string,
   status: number,
   issues?: ApiErrorBody["error"]["issues"],
+  details?: ApiErrorBody["error"]["details"],
 ) {
   return NextResponse.json(
     {
@@ -56,6 +69,7 @@ export function errorResponse(
         code,
         message,
         ...(issues ? { issues } : {}),
+        ...(details ? { details } : {}),
       },
     } satisfies ApiErrorBody,
     { status },
@@ -91,7 +105,20 @@ export function handleRouteError(error: unknown) {
     return validationErrorResponse(error);
   }
 
-  return errorResponse("INTERNAL_ERROR", "An unexpected error occurred.", 500);
+  console.error("[coaching api] unhandled error", error);
+
+  const details =
+    error instanceof Error
+      ? { name: error.name || "Error", message: error.message }
+      : { name: "UnknownError", message: String(error) };
+
+  return errorResponse(
+    "INTERNAL_ERROR",
+    "An unexpected error occurred.",
+    500,
+    undefined,
+    details,
+  );
 }
 
 export function requireOwnedResource<T extends { userId: string }>(
