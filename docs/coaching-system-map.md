@@ -38,3 +38,21 @@ The Firebase Admin SDK runs only on the server. Configure one of these credentia
 - `FIREBASE_PROJECT_ID` — recommended with application default credentials when the project cannot be inferred by the runtime.
 
 Never expose these variables to the browser and do not prefix them with `NEXT_PUBLIC_`.
+
+## AI provider routing
+
+`AI_PROVIDER` is a premium synthesis preference, not a global provider lock. In production mode, the orchestration keeps cheaper/high-volume expert-panel work on fast models first, then reserves the preferred main model tier for the final moderator synthesis step.
+
+- `AI_PROVIDER=anthropic` means the final moderator prefers Anthropic Opus first.
+- Cheap and high-volume steps (`intake_compression`, expert reviewers, and `panel_brief`) still try Kimi fast first, then OpenAI fast, then Anthropic fast.
+- The final moderator fallback order is explicit per main-model tier: the preferred `AI_PROVIDER` first, then the remaining main providers in the default order Anthropic, OpenAI, Kimi.
+- This routing prevents Anthropic Opus from being used for every subtask while still allowing Opus to synthesize the final plan when Anthropic is the preferred premium provider.
+
+Task-tier fallback summary:
+
+| Task tier                | Steps                                             | Production fallback order                                                                        |
+| ------------------------ | ------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Fast / cheap panel       | Intake compression, expert reviewers, panel brief | Kimi fast → OpenAI fast → Anthropic fast                                                         |
+| Main / premium synthesis | Final moderator                                   | Preferred `AI_PROVIDER` main model → remaining main providers in Anthropic → OpenAI → Kimi order |
+
+The model names can be overridden with `KIMI_MODEL_FAST`, `OPENAI_MODEL_FAST`, `ANTHROPIC_MODEL_FAST`, `ANTHROPIC_MODEL_MAIN`, `OPENAI_MODEL_MAIN`, and `KIMI_MODEL_MAIN` without changing the tier-level fallback order.
