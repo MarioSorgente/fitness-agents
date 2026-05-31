@@ -1,24 +1,51 @@
 import Link from "next/link";
 
-const sampleSubmissions = [
+import type { CompactClientProfile } from "@/lib/coaching/schemas/intakeSchema";
+
+type AdminSubmissionRow = CompactClientProfile & {
+  id: string;
+  goal: string;
+  status: string;
+  submittedAt: string;
+};
+
+const sampleSubmissions: AdminSubmissionRow[] = [
   {
     id: "demo-001",
     name: "Alex Rivera",
+    goals: ["Build strength", "Move without pain"],
     goal: "Build strength while training around knee discomfort",
+    equipment: [],
+    constraints: ["Knee discomfort"],
+    safetySignals: ["Knee discomfort"],
+    nutritionSignals: [],
+    missingInformation: [],
     status: "Ready for review",
     submittedAt: "May 29, 2026",
   },
   {
     id: "demo-002",
     name: "Jordan Lee",
+    goals: ["Improve conditioning", "Prepare for an event"],
     goal: "Improve conditioning for a fall trail race",
+    equipment: [],
+    constraints: [],
+    safetySignals: [],
+    nutritionSignals: [],
+    missingInformation: [],
     status: "Needs triage",
     submittedAt: "May 28, 2026",
   },
   {
     id: "demo-003",
     name: "Sam Patel",
+    goals: ["Build strength"],
     goal: "Return to consistent training after travel",
+    equipment: [],
+    constraints: ["Travel twice per month"],
+    safetySignals: [],
+    nutritionSignals: [],
+    missingInformation: [],
     status: "Draft plan queued",
     submittedAt: "May 27, 2026",
   },

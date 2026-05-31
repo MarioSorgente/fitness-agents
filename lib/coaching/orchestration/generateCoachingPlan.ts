@@ -9,7 +9,19 @@ import {
   getRoutesForStep,
   runRoutedCompletion,
 } from "../ai/provider";
-import type { JsonObject, JsonValue } from "../db/coachingRepository";
+import {
+  expertOutputSchema,
+  panelBriefSchema,
+  type ExpertOutput,
+  type PanelBrief,
+} from "../schemas/expertOutputSchema";
+import {
+  coachingAgentOutputsSchema,
+  coachingPlanContentSchema,
+  type CoachingAgentOutputs,
+  type CoachingPlanContent,
+} from "../schemas/coachingPlanSchema";
+import type { CoachingIntake, JsonObject, JsonValue } from "../schemas/intakeSchema";
 
 const EXPERT_STEPS: Array<{
   id: CoachingStepId;
@@ -49,14 +61,14 @@ const EXPERT_STEPS: Array<{
 ];
 
 export type GenerateCoachingPlanInput = {
-  intakePayload: JsonObject;
+  intakePayload: CoachingIntake;
   mode: CoachingOrchestrationMode;
   providers?: CoachingAiProviderRegistry;
 };
 
 export type GenerateCoachingPlanResult = {
-  plan: JsonObject;
-  agentOutputs: JsonObject;
+  plan: CoachingPlanContent;
+  agentOutputs: CoachingAgentOutputs;
 };
 
 type StepRun = {
@@ -98,6 +110,47 @@ function completionToStepRun(
     provider: completion.provider,
     model: completion.model,
   };
+}
+
+function normalizeStringArray(value: JsonValue | undefined): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    : [];
+}
+
+function objectValue(value: JsonValue | null): JsonObject {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+function stepRunToExpertOutput(run: StepRun): ExpertOutput {
+  const parsed = objectValue(safeJsonParse(run.content));
+
+  return expertOutputSchema.parse({
+    ...parsed,
+    step: run.step,
+    title: run.title,
+    provider: run.provider,
+    model: run.model,
+    findings: normalizeStringArray(parsed.findings),
+    recommendations: normalizeStringArray(parsed.recommendations),
+    risks: normalizeStringArray(parsed.risks),
+    followUps: normalizeStringArray(parsed.followUps),
+    content: run.content,
+  });
+}
+
+function stepRunToPanelBrief(run: StepRun, expertOutputs: ExpertOutput[]): PanelBrief {
+  const parsed = objectValue(safeJsonParse(run.content));
+
+  return panelBriefSchema.parse({
+    ...parsed,
+    agreements: normalizeStringArray(parsed.agreements),
+    conflicts: normalizeStringArray(parsed.conflicts),
+    safetyGates: normalizeStringArray(parsed.safetyGates),
+    planDirection: normalizeStringArray(parsed.planDirection),
+    expertOutputs,
+    content: run.content,
+  });
 }
 
 function routingMetadata(mode: CoachingOrchestrationMode): JsonObject {
@@ -143,9 +196,10 @@ export async function generateCoachingPlan({
       ],
     }),
   );
-  const compressedIntake = safeJsonParse(intakeCompression.content) ?? {
-    coachSummary: intakeCompression.content,
-  };
+  const compressedIntake = objectValue(safeJsonParse(intakeCompression.content));
+  if (Object.keys(compressedIntake).length === 0) {
+    compressedIntake.coachSummary = intakeCompression.content;
+  }
   const compressedIntakeText = JSON.stringify(compressedIntake);
 
   const expertRuns: StepRun[] = [];
@@ -169,6 +223,8 @@ export async function generateCoachingPlan({
     expertRuns.push(completionToStepRun(expert.id, expert.title, completion));
   }
 
+  const expertOutputs = expertRuns.map(stepRunToExpertOutput);
+
   const panelBrief = completionToStepRun(
     "panel_brief",
     "Panel brief",
@@ -185,16 +241,14 @@ export async function generateCoachingPlan({
           role: "user",
           content: JSON.stringify({
             compressedIntake,
-            expertOutputs: expertRuns.map((run) => ({
-              step: run.step,
-              title: run.title,
-              content: run.content,
-            })),
+            expertOutputs,
           }),
         },
       ],
     }),
   );
+
+  const panelBriefOutput = stepRunToPanelBrief(panelBrief, expertOutputs);
 
   const finalModerator = completionToStepRun(
     "final_moderator",
@@ -212,7 +266,7 @@ export async function generateCoachingPlan({
           role: "user",
           content: JSON.stringify({
             compressedIntake,
-            panelBrief: panelBrief.content,
+            panelBrief: panelBriefOutput,
           }),
         },
       ],
@@ -221,7 +275,7 @@ export async function generateCoachingPlan({
   const finalPlan = safeJsonParse(finalModerator.content);
 
   return {
-    plan: {
+    plan: coachingPlanContentSchema.parse({
       version: 1,
       orchestrationMode: mode,
       source: "api/coaching/generate-plan",
@@ -230,11 +284,11 @@ export async function generateCoachingPlan({
         model: finalModerator.model,
       },
       content:
-        finalPlan && typeof finalPlan === "object" && !Array.isArray(finalPlan)
-          ? finalPlan
+        Object.keys(objectValue(finalPlan)).length > 0
+          ? objectValue(finalPlan)
           : { planText: finalModerator.content },
-    },
-    agentOutputs: {
+    }),
+    agentOutputs: coachingAgentOutputsSchema.parse({
       status: "generated",
       routing: routingMetadata(mode),
       intakeCompression: {
@@ -243,11 +297,11 @@ export async function generateCoachingPlan({
         content: intakeCompression.content,
       },
       compressedIntake,
-      expertOutputs: expertRuns.map((run) => ({ ...run })),
-      panelBrief: { ...panelBrief },
+      expertOutputs,
+      panelBrief: panelBriefOutput,
       finalModerator: { ...finalModerator },
       rawIntakeDistribution:
         "Raw intake is sent only to intake_compression; expert steps receive compressedIntake only.",
-    },
+    }),
   };
 }

@@ -5,23 +5,11 @@ import {
   type CoachingExport,
   type CoachingPlan,
   type IntakeSubmission,
-  type JsonObject,
-  type JsonValue,
   type ReviewState,
 } from "../db/coachingRepository";
+import { jsonObjectSchema, jsonValueSchema } from "../schemas/intakeSchema";
 
-export const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
-  z.union([
-    z.string(),
-    z.number().finite(),
-    z.boolean(),
-    z.null(),
-    z.array(jsonValueSchema),
-    z.record(z.string(), jsonValueSchema),
-  ]),
-);
-
-export const jsonObjectSchema: z.ZodType<JsonObject> = z.record(z.string(), jsonValueSchema);
+export { jsonObjectSchema, jsonValueSchema };
 
 export const documentIdSchema = z.string().trim().min(1).max(256);
 export const userIdSchema = z.string().trim().min(1).max(256);

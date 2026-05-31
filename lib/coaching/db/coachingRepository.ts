@@ -1,6 +1,11 @@
-export type JsonPrimitive = string | number | boolean | null;
-export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
-export type JsonObject = { [key: string]: JsonValue };
+import type { CoachingIntake, JsonObject, JsonValue } from "../schemas/intakeSchema";
+import type {
+  CoachingAgentOutputs,
+  CoachingPlan as CoachingPlanRecord,
+  CoachingPlanContent,
+} from "../schemas/coachingPlanSchema";
+
+export type { JsonObject, JsonValue };
 
 export type CoachingRecordStatus = "draft" | "queued" | "running" | "ready" | "failed" | "archived";
 
@@ -8,23 +13,13 @@ export type IntakeSubmission = {
   id: string;
   userId: string;
   status: CoachingRecordStatus;
-  payload: JsonObject;
+  payload: CoachingIntake;
   createdAt: Date;
   updatedAt: Date;
   submittedAt?: Date;
 };
 
-export type CoachingPlan = {
-  id: string;
-  userId: string;
-  intakeSubmissionId: string;
-  status: CoachingRecordStatus;
-  plan: JsonObject;
-  agentOutputs?: JsonObject;
-  createdAt: Date;
-  updatedAt: Date;
-  publishedAt?: Date;
-};
+export type CoachingPlan = CoachingPlanRecord;
 
 export type ReviewStatus = "not_started" | "in_review" | "approved" | "changes_requested";
 
@@ -59,7 +54,7 @@ export type CreateIntakeSubmissionInput = {
   id?: string;
   userId: string;
   status?: CoachingRecordStatus;
-  payload: JsonObject;
+  payload: CoachingIntake;
   submittedAt?: Date;
 };
 
@@ -68,8 +63,8 @@ export type CreateCoachingPlanInput = {
   userId: string;
   intakeSubmissionId: string;
   status?: CoachingRecordStatus;
-  plan: JsonObject;
-  agentOutputs?: JsonObject;
+  plan: CoachingPlanContent;
+  agentOutputs?: CoachingAgentOutputs;
   publishedAt?: Date;
 };
 
