@@ -8,7 +8,7 @@ import {
   userIdSchema,
 } from "@/lib/coaching/api/routeUtils";
 import { coachingIntakeSchema } from "@/lib/coaching/schemas/intakeSchema";
-import { createFirebaseCoachingRepository } from "@/lib/coaching/db/firebaseCoachingRepository";
+import { createCoachingRepository } from "@/lib/coaching/db/coachingRepositoryFactory";
 
 export const runtime = "nodejs";
 
@@ -21,7 +21,7 @@ const submitIntakeSchema = z.object({
 export async function POST(request: Request) {
   try {
     const input = submitIntakeSchema.parse(await parseJsonBody(request));
-    const repository = createFirebaseCoachingRepository();
+    const repository = createCoachingRepository();
     const submittedAt = new Date();
 
     const submission = await repository.createIntakeSubmission({
