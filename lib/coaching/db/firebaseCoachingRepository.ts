@@ -78,7 +78,7 @@ function mapCoachingPlan(data: StoredCoachingPlan): CoachingPlan {
     createdAt: toDate(data.createdAt) ?? new Date(0),
     updatedAt: toDate(data.updatedAt) ?? new Date(0),
     publishedAt: toDate(data.publishedAt),
-  };
+  } as CoachingPlan;
 }
 
 function mapReviewState(data: StoredReviewState): ReviewState {

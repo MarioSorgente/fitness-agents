@@ -1,18 +1,15 @@
 import type { Firestore } from "firebase-admin/firestore";
 
+import { FirebaseConfigError } from "../api/routeUtils";
 import type { CoachingRepository } from "./coachingRepository";
 import { createFirebaseCoachingRepository } from "./firebaseCoachingRepository";
 import { LocalFileCoachingRepository } from "./localCoachingRepository";
 
-export class CoachingRepositoryConfigError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "CoachingRepositoryConfigError";
-  }
-}
-
-const FIREBASE_INCOMPLETE_MESSAGE =
-  "Firebase repository selected but Firebase Admin credentials are incomplete. Set FIREBASE_SERVICE_ACCOUNT_KEY or FIREBASE_PROJECT_ID + FIREBASE_CLIENT_EMAIL + FIREBASE_PRIVATE_KEY.";
+type RepositoryChoice = {
+  kind: "firebase" | "local";
+  reason: string;
+  explicit: boolean;
+};
 
 function hasFirebaseServiceAccount(): boolean {
   return Boolean(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
@@ -42,54 +39,72 @@ function hasFirebaseApplicationDefaultCredentials(): boolean {
   return Boolean(process.env.GOOGLE_APPLICATION_CREDENTIALS || process.env.FIRESTORE_EMULATOR_HOST);
 }
 
-function hasCompleteFirebaseCredentials(): boolean {
-  return (
-    hasFirebaseServiceAccount() ||
-    hasFirebaseIndividualCredentials() ||
-    hasFirebaseApplicationDefaultCredentials()
-  );
-}
-
-function hasPartialFirebaseCredentials(): boolean {
-  return hasPartialFirebaseServiceAccount() || hasPartialFirebaseIndividualCredentials();
-}
-
-function isProductionVercel(): boolean {
-  return Boolean(
-    process.env.VERCEL &&
-      (process.env.VERCEL_ENV === "production" || process.env.NODE_ENV === "production"),
-  );
-}
-
-function shouldUseFirebase(): boolean {
-  const repositoryMode = process.env.COACHING_REPOSITORY?.trim().toLowerCase();
-
-  if (repositoryMode === "firebase") {
-    if (!hasCompleteFirebaseCredentials()) {
-      throw new CoachingRepositoryConfigError(FIREBASE_INCOMPLETE_MESSAGE);
-    }
-    return true;
+function chooseRepository(): RepositoryChoice {
+  if (process.env.COACHING_REPOSITORY === "firebase") {
+    return { kind: "firebase", reason: "COACHING_REPOSITORY=firebase", explicit: true };
   }
 
-  if (repositoryMode === "local") {
-    return false;
+  if (process.env.COACHING_REPOSITORY === "local") {
+    return { kind: "local", reason: "COACHING_REPOSITORY=local", explicit: true };
   }
 
-  if (hasCompleteFirebaseCredentials()) {
-    return true;
+  if (hasFirebaseServiceAccount()) {
+    return {
+      kind: "firebase",
+      reason: "FIREBASE_SERVICE_ACCOUNT_KEY detected",
+      explicit: false,
+    };
+  }
+  if (hasFirebaseIndividualCredentials()) {
+    return {
+      kind: "firebase",
+      reason: "FIREBASE_PROJECT_ID/CLIENT_EMAIL/PRIVATE_KEY detected",
+      explicit: false,
+    };
+  }
+  if (hasFirebaseApplicationDefaultCredentials()) {
+    return {
+      kind: "firebase",
+      reason: "Firebase application default credentials detected",
+      explicit: false,
+    };
   }
 
-  if (hasPartialFirebaseCredentials() || isProductionVercel()) {
-    throw new CoachingRepositoryConfigError(FIREBASE_INCOMPLETE_MESSAGE);
-  }
-
-  return false;
+  return { kind: "local", reason: "no Firebase env vars detected", explicit: false };
 }
 
 export function createCoachingRepository(db?: Firestore): CoachingRepository {
-  if (db || shouldUseFirebase()) {
+  if (db) {
+    console.info("[coaching repo] using FirebaseCoachingRepository (explicit Firestore instance)");
     return createFirebaseCoachingRepository(db);
   }
 
+  const choice = chooseRepository();
+
+  if (choice.kind === "firebase") {
+    try {
+      const repo = createFirebaseCoachingRepository();
+      console.info(`[coaching repo] using FirebaseCoachingRepository (${choice.reason})`);
+      return repo;
+    } catch (error) {
+      if (choice.explicit) {
+        // User explicitly asked for Firebase — surface the real error.
+        throw error;
+      }
+
+      const reason =
+        error instanceof FirebaseConfigError
+          ? `config error: ${error.message}`
+          : error instanceof Error
+            ? `${error.name}: ${error.message}`
+            : String(error);
+      console.warn(
+        `[coaching repo] Firebase auto-detect failed (${reason}); falling back to LocalFileCoachingRepository. Set COACHING_REPOSITORY=local to silence this warning.`,
+      );
+      return new LocalFileCoachingRepository();
+    }
+  }
+
+  console.info(`[coaching repo] using LocalFileCoachingRepository (${choice.reason})`);
   return new LocalFileCoachingRepository();
 }

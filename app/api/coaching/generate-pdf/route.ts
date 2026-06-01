@@ -21,6 +21,14 @@ export async function POST(request: Request) {
       input.userId,
       "Coaching plan",
     );
+    if ((plan.plan.content as { mode?: unknown } | undefined)?.mode === "text_fallback") {
+      throw new ApiRouteError(
+        "PLAN_NOT_APPROVED",
+        "This plan was produced in text-fallback mode (AI providers were unavailable) and is not eligible for PDF export. Re-run plan generation once providers are configured.",
+        409,
+      );
+    }
+
     const reviewState = await repository.getReviewState(plan.id);
 
     if (reviewState?.status !== "approved") {

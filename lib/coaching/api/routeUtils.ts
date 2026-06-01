@@ -17,11 +17,13 @@ export const userIdSchema = z.string().trim().min(1).max(256);
 export type ApiErrorCode =
   | "BAD_REQUEST"
   | "CONFIGURATION_ERROR"
+  | "FIREBASE_CONFIG"
   | "FORBIDDEN"
   | "INTERNAL_ERROR"
   | "METHOD_NOT_ALLOWED"
   | "NOT_FOUND"
   | "PLAN_NOT_APPROVED"
+  | "UNAUTHORIZED"
   | "VALIDATION_ERROR";
 
 type ApiErrorBody = {
@@ -32,6 +34,10 @@ type ApiErrorBody = {
       path: string;
       message: string;
     }>;
+    details?: {
+      name: string;
+      message: string;
+    };
   };
 };
 
@@ -45,11 +51,19 @@ export class ApiRouteError extends Error {
   }
 }
 
+export class FirebaseConfigError extends ApiRouteError {
+  constructor(message: string) {
+    super("FIREBASE_CONFIG", message, 500);
+    this.name = "FirebaseConfigError";
+  }
+}
+
 export function errorResponse(
   code: ApiErrorCode,
   message: string,
   status: number,
   issues?: ApiErrorBody["error"]["issues"],
+  details?: ApiErrorBody["error"]["details"],
 ) {
   return NextResponse.json(
     {
@@ -57,6 +71,7 @@ export function errorResponse(
         code,
         message,
         ...(issues ? { issues } : {}),
+        ...(details ? { details } : {}),
       },
     } satisfies ApiErrorBody,
     { status },
@@ -178,37 +193,52 @@ export function handleRouteError(error: unknown, context?: RouteErrorContext) {
     return validationErrorResponse(error);
   }
 
-  const response = knownErrorResponse(error);
-  if (response) {
-    return response;
+  const known = knownErrorResponse(error);
+  if (known) {
+    return known;
   }
+
+  console.error("[coaching api] unhandled error", error);
+
+  const details =
+    error instanceof Error
+      ? { name: error.name || "Error", message: error.message }
+      : { name: "UnknownError", message: String(error) };
 
   return errorResponse(
     "INTERNAL_ERROR",
-    "An unexpected error occurred. Check server logs for details.",
+    "An unexpected error occurred.",
     500,
+    undefined,
+    details,
   );
 }
 
-export function requireAdminAccess(request: Request) {
-  const expectedKey = process.env.ADMIN_ACCESS_KEY;
-
-  if (!expectedKey) {
+export function requireAdminAccess(request: Request): void {
+  const expected = process.env.ADMIN_ACCESS_KEY?.trim();
+  if (!expected) {
     throw new ApiRouteError(
       "CONFIGURATION_ERROR",
-      "ADMIN_ACCESS_KEY is not configured for this admin-only endpoint.",
+      "ADMIN_ACCESS_KEY is not configured on the server.",
       500,
     );
   }
 
-  const authorization = request.headers.get("authorization") ?? "";
-  const bearerToken = authorization.toLowerCase().startsWith("bearer ")
-    ? authorization.slice(7).trim()
-    : undefined;
-  const submittedKey = request.headers.get("x-admin-access-key") ?? bearerToken;
+  const headerKey = request.headers.get("x-admin-key")?.trim();
+  const url = new URL(request.url);
+  const queryKey = url.searchParams.get("adminKey")?.trim();
+  const provided = headerKey || queryKey;
 
-  if (submittedKey !== expectedKey) {
-    throw new ApiRouteError("FORBIDDEN", "Admin access key is missing or invalid.", 403);
+  if (!provided) {
+    throw new ApiRouteError(
+      "UNAUTHORIZED",
+      "Admin access key is required. Send it as the x-admin-key header or adminKey query param.",
+      401,
+    );
+  }
+
+  if (provided !== expected) {
+    throw new ApiRouteError("FORBIDDEN", "Admin access key is invalid.", 403);
   }
 }
 
