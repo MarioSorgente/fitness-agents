@@ -46,21 +46,35 @@ export function createAnthropicProvider(
           content: message.content,
         }));
 
-      const response = await fetch(baseUrl, {
-        method: "POST",
-        headers: {
-          "anthropic-version": ANTHROPIC_VERSION,
-          "content-type": "application/json",
-          "x-api-key": apiKey,
-        },
-        body: JSON.stringify({
-          model: request.model,
-          max_tokens: request.maxTokens ?? 1200,
-          temperature: request.temperature ?? 0.2,
-          ...(system ? { system } : {}),
-          messages,
-        }),
-      });
+      const controller = new AbortController();
+      const timeoutMs = 90_000;
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      let response: Response;
+      try {
+        response = await fetch(baseUrl, {
+          method: "POST",
+          headers: {
+            "anthropic-version": ANTHROPIC_VERSION,
+            "content-type": "application/json",
+            "x-api-key": apiKey,
+          },
+          body: JSON.stringify({
+            model: request.model,
+            max_tokens: request.maxTokens ?? 1200,
+            temperature: request.temperature ?? 0.2,
+            ...(system ? { system } : {}),
+            messages,
+          }),
+          signal: controller.signal,
+        });
+      } catch (error) {
+        clearTimeout(timeoutId);
+        if (error instanceof Error && error.name === "AbortError") {
+          throw new Error(`Anthropic request timed out after ${timeoutMs / 1000}s.`);
+        }
+        throw error;
+      }
+      clearTimeout(timeoutId);
       const body = (await response.json().catch(() => ({}))) as AnthropicMessageResponse;
 
       if (!response.ok) {

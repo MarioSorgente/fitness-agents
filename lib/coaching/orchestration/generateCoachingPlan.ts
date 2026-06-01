@@ -60,16 +60,46 @@ const EXPERT_STEPS: Array<{
   },
 ];
 
+export type CoachingProgressEvent =
+  | { kind: "step_started"; step: CoachingStepId; title: string }
+  | {
+      kind: "step_completed";
+      step: CoachingStepId;
+      title: string;
+      provider: string;
+      model: string;
+      durationMs: number;
+    }
+  | {
+      kind: "step_failed";
+      step: CoachingStepId;
+      title: string;
+      error: string;
+      durationMs: number;
+    };
+
 export type GenerateCoachingPlanInput = {
   intakePayload: CoachingIntake;
   mode: CoachingOrchestrationMode;
   providers?: CoachingAiProviderRegistry;
+  onProgress?: (event: CoachingProgressEvent) => void;
 };
 
 export type GenerateCoachingPlanResult = {
   plan: CoachingPlanContent;
   agentOutputs: CoachingAgentOutputs;
 };
+
+export const COACHING_AGENT_TIMELINE: ReadonlyArray<{ step: CoachingStepId; title: string }> = [
+  { step: "intake_compression", title: "Intake compression" },
+  { step: "medical_safety_screener", title: "Medical safety screener" },
+  { step: "physio_reviewer", title: "Physio reviewer" },
+  { step: "fitness_coach", title: "Fitness coach" },
+  { step: "mobility_coach", title: "Mobility coach" },
+  { step: "nutrition_reviewer", title: "Nutrition reviewer" },
+  { step: "panel_brief", title: "Panel brief" },
+  { step: "final_moderator", title: "Final moderator" },
+];
 
 type StepRun = {
   step: CoachingStepId;
@@ -180,31 +210,72 @@ function routingMetadata(mode: CoachingOrchestrationMode): JsonObject {
   };
 }
 
+async function runStep(
+  providers: CoachingAiProviderRegistry,
+  step: CoachingStepId,
+  title: string,
+  mode: CoachingOrchestrationMode,
+  request: Parameters<typeof runRoutedCompletion>[3],
+  onProgress?: (event: CoachingProgressEvent) => void,
+): Promise<CoachingAiCompletion> {
+  onProgress?.({ kind: "step_started", step, title });
+  const startedAt = Date.now();
+  try {
+    const completion = await runRoutedCompletion(providers, step, mode, request);
+    onProgress?.({
+      kind: "step_completed",
+      step,
+      title,
+      provider: completion.provider,
+      model: completion.model,
+      durationMs: Date.now() - startedAt,
+    });
+    return completion;
+  } catch (error) {
+    onProgress?.({
+      kind: "step_failed",
+      step,
+      title,
+      error: error instanceof Error ? error.message : String(error),
+      durationMs: Date.now() - startedAt,
+    });
+    throw error;
+  }
+}
+
 export async function generateCoachingPlan({
   intakePayload,
   mode,
   providers = createDefaultProviderRegistry(),
+  onProgress,
 }: GenerateCoachingPlanInput): Promise<GenerateCoachingPlanResult> {
   const intakeCompression = completionToStepRun(
     "intake_compression",
     "Intake compression",
-    await runRoutedCompletion(providers, "intake_compression", mode, {
-      temperature: 0,
-      maxTokens: 1200,
-      messages: [
-        {
-          role: "system",
-          content:
-            "You compress coaching intakes into a privacy-minimized structured brief. Preserve safety-relevant facts, goals, constraints, equipment, schedule, and missing information. Do not invent details. Return a single valid JSON object only with no markdown or commentary.",
-        },
-        {
-          role: "user",
-          content: `Compress this raw intake into JSON with keys: clientProfile, goals, schedule, equipment, constraints, safetySignals, nutritionSignals, missingInformation, coachSummary. Raw intake:\n${JSON.stringify(
-            intakePayload,
-          )}`,
-        },
-      ],
-    }),
+    await runStep(
+      providers,
+      "intake_compression",
+      "Intake compression",
+      mode,
+      {
+        temperature: 0,
+        maxTokens: 1800,
+        messages: [
+          {
+            role: "system",
+            content:
+              "You compress coaching intakes into a privacy-minimized structured brief. Preserve safety-relevant facts, goals, constraints, equipment, schedule, and missing information. Do not invent details. Return a single valid JSON object only with no markdown or commentary.",
+          },
+          {
+            role: "user",
+            content: `Compress this raw intake into JSON with keys: clientProfile, goals, schedule, equipment, constraints, safetySignals, nutritionSignals, missingInformation, coachSummary. Raw intake:\n${JSON.stringify(
+              intakePayload,
+            )}`,
+          },
+        ],
+      },
+      onProgress,
+    ),
   );
   const compressedIntake = objectValue(safeJsonParse(intakeCompression.content));
   if (Object.keys(compressedIntake).length === 0) {
@@ -215,20 +286,27 @@ export async function generateCoachingPlan({
   const expertRuns: StepRun[] = [];
 
   for (const expert of EXPERT_STEPS) {
-    const completion = await runRoutedCompletion(providers, expert.id, mode, {
-      temperature: 0.2,
-      maxTokens: 1000,
-      messages: [
-        {
-          role: "system",
-          content: `You are the ${expert.title} in a coaching plan panel. ${expert.instruction} Return one strict JSON object only with keys: findings, recommendations, risks, followUps. Do not wrap the JSON in markdown.`,
-        },
-        {
-          role: "user",
-          content: `Use only this compressed intake brief. Do not request or rely on the full raw intake.\n${compressedIntakeText}`,
-        },
-      ],
-    });
+    const completion = await runStep(
+      providers,
+      expert.id,
+      expert.title,
+      mode,
+      {
+        temperature: 0.2,
+        maxTokens: 1500,
+        messages: [
+          {
+            role: "system",
+            content: `You are the ${expert.title} in a coaching plan panel. ${expert.instruction} Return one strict JSON object only with keys: findings, recommendations, risks, followUps. Do not wrap the JSON in markdown.`,
+          },
+          {
+            role: "user",
+            content: `Use only this compressed intake brief. Do not request or rely on the full raw intake.\n${compressedIntakeText}`,
+          },
+        ],
+      },
+      onProgress,
+    );
 
     expertRuns.push(completionToStepRun(expert.id, expert.title, completion));
   }
@@ -238,24 +316,31 @@ export async function generateCoachingPlan({
   const panelBrief = completionToStepRun(
     "panel_brief",
     "Panel brief",
-    await runRoutedCompletion(providers, "panel_brief", mode, {
-      temperature: 0.1,
-      maxTokens: 1400,
-      messages: [
-        {
-          role: "system",
-          content:
-            "You merge expert panel notes into a concise moderator brief. Highlight agreements, conflicts, safety gates, and the safest actionable plan direction. Return one strict JSON object only with no markdown or commentary.",
-        },
-        {
-          role: "user",
-          content: JSON.stringify({
-            compressedIntake,
-            expertOutputs,
-          }),
-        },
-      ],
-    }),
+    await runStep(
+      providers,
+      "panel_brief",
+      "Panel brief",
+      mode,
+      {
+        temperature: 0.1,
+        maxTokens: 2000,
+        messages: [
+          {
+            role: "system",
+            content:
+              "You merge expert panel notes into a concise moderator brief. Highlight agreements, conflicts, safety gates, and the safest actionable plan direction. Return one strict JSON object only with no markdown or commentary.",
+          },
+          {
+            role: "user",
+            content: JSON.stringify({
+              compressedIntake,
+              expertOutputs,
+            }),
+          },
+        ],
+      },
+      onProgress,
+    ),
   );
 
   const panelBriefOutput = stepRunToPanelBrief(panelBrief, expertOutputs);
@@ -263,24 +348,31 @@ export async function generateCoachingPlan({
   const finalModerator = completionToStepRun(
     "final_moderator",
     "Final moderator",
-    await runRoutedCompletion(providers, "final_moderator", mode, {
-      temperature: 0.1,
-      maxTokens: 2200,
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are the final coaching plan moderator. Create a safe, practical, review-ready coaching plan from the compressed intake and panel brief. Include safety disclaimers where needed. Return one strict JSON object only with no markdown or commentary.",
-        },
-        {
-          role: "user",
-          content: JSON.stringify({
-            compressedIntake,
-            panelBrief: panelBriefOutput,
-          }),
-        },
-      ],
-    }),
+    await runStep(
+      providers,
+      "final_moderator",
+      "Final moderator",
+      mode,
+      {
+        temperature: 0.1,
+        maxTokens: 3500,
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are the final coaching plan moderator. Create a safe, practical, review-ready coaching plan from the compressed intake and panel brief. Include safety disclaimers where needed. Return one strict JSON object only with no markdown or commentary.",
+          },
+          {
+            role: "user",
+            content: JSON.stringify({
+              compressedIntake,
+              panelBrief: panelBriefOutput,
+            }),
+          },
+        ],
+      },
+      onProgress,
+    ),
   );
   const finalPlan = safeJsonParse(finalModerator.content);
 

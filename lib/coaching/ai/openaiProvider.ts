@@ -33,19 +33,33 @@ export function createOpenAiProvider(options: OpenAiProviderOptions = {}): Coach
         throw new Error("OPENAI_API_KEY is not configured.");
       }
 
-      const response = await fetch(baseUrl, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: request.model,
-          messages: request.messages,
-          temperature: request.temperature ?? 0.2,
-          max_tokens: request.maxTokens ?? 1200,
-        }),
-      });
+      const controller = new AbortController();
+      const timeoutMs = 90_000;
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      let response: Response;
+      try {
+        response = await fetch(baseUrl, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: request.model,
+            messages: request.messages,
+            temperature: request.temperature ?? 0.2,
+            max_tokens: request.maxTokens ?? 1200,
+          }),
+          signal: controller.signal,
+        });
+      } catch (error) {
+        clearTimeout(timeoutId);
+        if (error instanceof Error && error.name === "AbortError") {
+          throw new Error(`OpenAI request timed out after ${timeoutMs / 1000}s.`);
+        }
+        throw error;
+      }
+      clearTimeout(timeoutId);
       const body = (await response.json().catch(() => ({}))) as OpenAiChatCompletionResponse;
 
       if (!response.ok) {

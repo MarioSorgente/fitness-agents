@@ -1,21 +1,24 @@
-import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import {
   documentIdSchema,
-  handleRouteError,
+  errorResponse,
   parseJsonBody,
   requireOwnedResource,
-  serializeCoachingPlan,
-  serializeIntakeSubmission,
-  serializeReviewState,
   userIdSchema,
 } from "@/lib/coaching/api/routeUtils";
 import { createCoachingRepository } from "@/lib/coaching/db/coachingRepositoryFactory";
 import { buildCoachingTextFallback } from "@/lib/coaching/orchestration/buildTextFallback";
-import { generateCoachingPlan } from "@/lib/coaching/orchestration/generateCoachingPlan";
+import {
+  COACHING_AGENT_TIMELINE,
+  type CoachingProgressEvent,
+  generateCoachingPlan,
+} from "@/lib/coaching/orchestration/generateCoachingPlan";
+import type { CoachingPlanContent } from "@/lib/coaching/schemas/coachingPlanSchema";
 
 export const runtime = "nodejs";
+// Allow up to 5 minutes for the full multi-agent orchestration on Vercel Fluid Compute.
+export const maxDuration = 300;
 
 const generatePlanSchema = z.object({
   userId: userIdSchema,
@@ -23,97 +26,169 @@ const generatePlanSchema = z.object({
   orchestrationMode: z.enum(["test", "production"]).default("test"),
 });
 
+type StreamEvent =
+  | { kind: "intake_loaded"; submissionId: string }
+  | { kind: "timeline"; steps: Array<{ step: string; title: string }> }
+  | CoachingProgressEvent
+  | {
+      kind: "plan_ready";
+      planId: string;
+      reviewStateId?: string;
+      // Full plan content streamed inline so the client can render the PDF without
+      // a second server round-trip — critical when storage is ephemeral (Vercel local mode).
+      plan: CoachingPlanContent;
+      userId: string;
+      intakeSubmissionId: string;
+    }
+  | {
+      kind: "plan_text_fallback";
+      planId: string;
+      reason: string;
+      planText: string;
+    }
+  | { kind: "error"; message: string; details?: { name: string; message: string } }
+  | { kind: "done" };
+
+function sseLine(event: StreamEvent): string {
+  return `data: ${JSON.stringify(event)}\n\n`;
+}
+
 export async function POST(request: Request) {
+  // Parse and validate up-front so client gets a normal JSON 4xx for bad input.
+  let input: z.infer<typeof generatePlanSchema>;
   try {
-    const input = generatePlanSchema.parse(await parseJsonBody(request));
-    const repository = createCoachingRepository();
-    const intakeSubmission = requireOwnedResource(
-      await repository.getIntakeSubmission(input.intakeSubmissionId),
-      input.userId,
-      "Intake submission",
-    );
-    const generatedAt = new Date();
-
-    let generated;
-    try {
-      generated = await generateCoachingPlan({
-        intakePayload: intakeSubmission.payload,
-        mode: input.orchestrationMode,
-      });
-    } catch (agentError) {
-      const reason =
-        agentError instanceof Error ? agentError.message : "AI provider error";
-      console.warn("[coaching plan] agent pipeline failed; using text fallback:", reason);
-
-      const planText = buildCoachingTextFallback(intakeSubmission.payload, reason);
-      const fallbackPlan = await repository.createCoachingPlan({
-        userId: input.userId,
-        intakeSubmissionId: intakeSubmission.id,
-        status: "ready",
-        plan: {
-          version: 1,
-          orchestrationMode: input.orchestrationMode,
-          source: "api/coaching/generate-plan",
-          generatedAt: generatedAt.toISOString(),
-          content: {
-            mode: "text_fallback",
-            reason,
-            planText,
-          },
-        },
-        agentOutputs: {
-          status: "text_fallback",
-          generatedAt: generatedAt.toISOString(),
-          expertOutputs: [],
-        },
-      });
-
-      return NextResponse.json(
-        {
-          data: {
-            mode: "text_fallback" as const,
-            reason,
-            planText,
-            intakeSubmission: serializeIntakeSubmission(intakeSubmission),
-            plan: serializeCoachingPlan(fallbackPlan),
-          },
-        },
-        { status: 201 },
+    input = generatePlanSchema.parse(await parseJsonBody(request));
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return errorResponse(
+        "VALIDATION_ERROR",
+        "Request body failed validation.",
+        400,
+        error.issues.map((issue) => ({
+          path: issue.path.join("."),
+          message: issue.message,
+        })),
       );
     }
-
-    const plan = await repository.createCoachingPlan({
-      userId: input.userId,
-      intakeSubmissionId: intakeSubmission.id,
-      status: "ready",
-      plan: {
-        ...generated.plan,
-        generatedAt: generatedAt.toISOString(),
-      },
-      agentOutputs: {
-        ...generated.agentOutputs,
-        generatedAt: generatedAt.toISOString(),
-      },
-    });
-
-    const reviewState = await repository.upsertReviewState({
-      userId: input.userId,
-      planId: plan.id,
-      status: "in_review",
-    });
-
-    return NextResponse.json(
-      {
-        data: {
-          mode: "ready" as const,
-          intakeSubmission: serializeIntakeSubmission(intakeSubmission),
-          plan: serializeCoachingPlan(plan),
-          reviewState: serializeReviewState(reviewState),
-        },
-      },
-      { status: 201 },
-    );
-  } catch (error) {
-    return handleRouteError(error);
+    const message = error instanceof Error ? error.message : "Invalid request.";
+    return errorResponse("BAD_REQUEST", message, 400);
   }
+
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const send = (event: StreamEvent) => {
+        controller.enqueue(encoder.encode(sseLine(event)));
+      };
+
+      try {
+        const repository = createCoachingRepository();
+        const intakeSubmission = requireOwnedResource(
+          await repository.getIntakeSubmission(input.intakeSubmissionId),
+          input.userId,
+          "Intake submission",
+        );
+        send({ kind: "intake_loaded", submissionId: intakeSubmission.id });
+        send({
+          kind: "timeline",
+          steps: COACHING_AGENT_TIMELINE.map((entry) => ({
+            step: entry.step,
+            title: entry.title,
+          })),
+        });
+
+        const generatedAt = new Date();
+
+        try {
+          const generated = await generateCoachingPlan({
+            intakePayload: intakeSubmission.payload,
+            mode: input.orchestrationMode,
+            onProgress: (event) => send(event),
+          });
+
+          const plan = await repository.createCoachingPlan({
+            userId: input.userId,
+            intakeSubmissionId: intakeSubmission.id,
+            status: "ready",
+            plan: {
+              ...generated.plan,
+              generatedAt: generatedAt.toISOString(),
+            },
+            agentOutputs: {
+              ...generated.agentOutputs,
+              generatedAt: generatedAt.toISOString(),
+            },
+          });
+
+          const reviewState = await repository.upsertReviewState({
+            userId: input.userId,
+            planId: plan.id,
+            status: "in_review",
+          });
+
+          send({
+            kind: "plan_ready",
+            planId: plan.id,
+            reviewStateId: reviewState.id,
+            plan: plan.plan,
+            userId: plan.userId,
+            intakeSubmissionId: plan.intakeSubmissionId,
+          });
+        } catch (agentError) {
+          const reason =
+            agentError instanceof Error ? agentError.message : "AI provider error";
+          console.warn("[coaching plan] agent pipeline failed; using text fallback:", reason);
+
+          const planText = buildCoachingTextFallback(intakeSubmission.payload, reason);
+          const fallbackPlan = await repository.createCoachingPlan({
+            userId: input.userId,
+            intakeSubmissionId: intakeSubmission.id,
+            status: "ready",
+            plan: {
+              version: 1,
+              orchestrationMode: input.orchestrationMode,
+              source: "api/coaching/generate-plan",
+              generatedAt: generatedAt.toISOString(),
+              content: {
+                mode: "text_fallback",
+                reason,
+                planText,
+              },
+            },
+            agentOutputs: {
+              status: "text_fallback",
+              generatedAt: generatedAt.toISOString(),
+              expertOutputs: [],
+            },
+          });
+
+          send({
+            kind: "plan_text_fallback",
+            planId: fallbackPlan.id,
+            reason,
+            planText,
+          });
+        }
+      } catch (error) {
+        console.error("[coaching plan] stream error", error);
+        const details =
+          error instanceof Error
+            ? { name: error.name || "Error", message: error.message }
+            : { name: "UnknownError", message: String(error) };
+        send({ kind: "error", message: details.message, details });
+      } finally {
+        send({ kind: "done" });
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-store, no-transform",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+    },
+  });
 }
