@@ -33,19 +33,33 @@ export function createKimiProvider(options: KimiProviderOptions = {}): CoachingA
         throw new Error("KIMI_API_KEY or MOONSHOT_API_KEY is not configured.");
       }
 
-      const response = await fetch(baseUrl, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: request.model,
-          messages: request.messages,
-          temperature: request.temperature ?? 0.2,
-          max_tokens: request.maxTokens ?? 1200,
-        }),
-      });
+      const controller = new AbortController();
+      const timeoutMs = 90_000;
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      let response: Response;
+      try {
+        response = await fetch(baseUrl, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: request.model,
+            messages: request.messages,
+            temperature: request.temperature ?? 0.2,
+            max_tokens: request.maxTokens ?? 1200,
+          }),
+          signal: controller.signal,
+        });
+      } catch (error) {
+        clearTimeout(timeoutId);
+        if (error instanceof Error && error.name === "AbortError") {
+          throw new Error(`Kimi request timed out after ${timeoutMs / 1000}s.`);
+        }
+        throw error;
+      }
+      clearTimeout(timeoutId);
       const body = (await response.json().catch(() => ({}))) as KimiChatCompletionResponse;
 
       if (!response.ok) {

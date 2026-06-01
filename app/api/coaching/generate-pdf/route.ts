@@ -11,6 +11,7 @@ import { coachingPlanPdfFilename, renderCoachingPlanPdf } from "@/lib/coaching/p
 import { pdfGenerationRequestSchema } from "@/lib/coaching/schemas/coachingPlanSchema";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 export async function POST(request: Request) {
   try {
