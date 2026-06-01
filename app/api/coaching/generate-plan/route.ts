@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { randomUUID } from "node:crypto";
+
 import {
   documentIdSchema,
   errorResponse,
@@ -15,16 +17,25 @@ import {
   generateCoachingPlan,
 } from "@/lib/coaching/orchestration/generateCoachingPlan";
 import type { CoachingPlanContent } from "@/lib/coaching/schemas/coachingPlanSchema";
+import { coachingIntakeSchema } from "@/lib/coaching/schemas/intakeSchema";
 
 export const runtime = "nodejs";
 // Allow up to 5 minutes for the full multi-agent orchestration on Vercel Fluid Compute.
 export const maxDuration = 300;
 
-const generatePlanSchema = z.object({
-  userId: userIdSchema,
-  intakeSubmissionId: documentIdSchema,
-  orchestrationMode: z.enum(["test", "production"]).default("test"),
-});
+const generatePlanSchema = z
+  .object({
+    userId: userIdSchema,
+    intakeSubmissionId: documentIdSchema.optional(),
+    // Inline intake payload — preferred path. Eliminates the cross-Lambda lookup
+    // that fails on Vercel's per-invocation local storage.
+    intakePayload: coachingIntakeSchema.optional(),
+    orchestrationMode: z.enum(["test", "production"]).default("test"),
+  })
+  .refine((value) => Boolean(value.intakePayload || value.intakeSubmissionId), {
+    message: "Either intakePayload or intakeSubmissionId must be provided.",
+    path: ["intakePayload"],
+  });
 
 type StreamEvent =
   | { kind: "intake_loaded"; submissionId: string }
@@ -82,13 +93,29 @@ export async function POST(request: Request) {
       };
 
       try {
-        const repository = createCoachingRepository();
-        const intakeSubmission = requireOwnedResource(
-          await repository.getIntakeSubmission(input.intakeSubmissionId),
-          input.userId,
-          "Intake submission",
-        );
-        send({ kind: "intake_loaded", submissionId: intakeSubmission.id });
+        let intakePayload: typeof input.intakePayload;
+        let submissionId: string;
+
+        if (input.intakePayload) {
+          // Stateless path: client supplied the validated intake directly.
+          intakePayload = input.intakePayload;
+          submissionId = input.intakeSubmissionId ?? randomUUID();
+        } else if (input.intakeSubmissionId) {
+          // Stateful path: look up the submission (only works when the same Lambda
+          // handled submit-intake or when Firebase persistence is healthy).
+          const repository = createCoachingRepository();
+          const intakeSubmission = requireOwnedResource(
+            await repository.getIntakeSubmission(input.intakeSubmissionId),
+            input.userId,
+            "Intake submission",
+          );
+          intakePayload = intakeSubmission.payload;
+          submissionId = intakeSubmission.id;
+        } else {
+          throw new Error("intakePayload or intakeSubmissionId is required.");
+        }
+
+        send({ kind: "intake_loaded", submissionId });
         send({
           kind: "timeline",
           steps: COACHING_AGENT_TIMELINE.map((entry) => ({
@@ -98,73 +125,66 @@ export async function POST(request: Request) {
         });
 
         const generatedAt = new Date();
+        const planId = randomUUID();
 
         try {
           const generated = await generateCoachingPlan({
-            intakePayload: intakeSubmission.payload,
+            intakePayload,
             mode: input.orchestrationMode,
             onProgress: (event) => send(event),
           });
 
-          const plan = await repository.createCoachingPlan({
-            userId: input.userId,
-            intakeSubmissionId: intakeSubmission.id,
-            status: "ready",
-            plan: {
-              ...generated.plan,
-              generatedAt: generatedAt.toISOString(),
-            },
-            agentOutputs: {
-              ...generated.agentOutputs,
-              generatedAt: generatedAt.toISOString(),
-            },
-          });
+          const planContent: CoachingPlanContent = {
+            ...generated.plan,
+            generatedAt: generatedAt.toISOString(),
+          };
 
-          const reviewState = await repository.upsertReviewState({
-            userId: input.userId,
-            planId: plan.id,
-            status: "in_review",
-          });
+          // Best-effort persistence — never blocks the response. On Vercel local-mode
+          // this often won't survive past the current Lambda; the inline plan we send
+          // to the client is what powers PDF download.
+          void (async () => {
+            try {
+              const repository = createCoachingRepository();
+              await repository.createCoachingPlan({
+                id: planId,
+                userId: input.userId,
+                intakeSubmissionId: submissionId,
+                status: "ready",
+                plan: planContent,
+                agentOutputs: {
+                  ...generated.agentOutputs,
+                  generatedAt: generatedAt.toISOString(),
+                },
+              });
+              await repository.upsertReviewState({
+                userId: input.userId,
+                planId,
+                status: "in_review",
+              });
+            } catch (persistError) {
+              console.warn(
+                "[coaching plan] best-effort plan persistence failed:",
+                persistError instanceof Error ? persistError.message : persistError,
+              );
+            }
+          })();
 
           send({
             kind: "plan_ready",
-            planId: plan.id,
-            reviewStateId: reviewState.id,
-            plan: plan.plan,
-            userId: plan.userId,
-            intakeSubmissionId: plan.intakeSubmissionId,
+            planId,
+            plan: planContent,
+            userId: input.userId,
+            intakeSubmissionId: submissionId,
           });
         } catch (agentError) {
           const reason =
             agentError instanceof Error ? agentError.message : "AI provider error";
           console.warn("[coaching plan] agent pipeline failed; using text fallback:", reason);
 
-          const planText = buildCoachingTextFallback(intakeSubmission.payload, reason);
-          const fallbackPlan = await repository.createCoachingPlan({
-            userId: input.userId,
-            intakeSubmissionId: intakeSubmission.id,
-            status: "ready",
-            plan: {
-              version: 1,
-              orchestrationMode: input.orchestrationMode,
-              source: "api/coaching/generate-plan",
-              generatedAt: generatedAt.toISOString(),
-              content: {
-                mode: "text_fallback",
-                reason,
-                planText,
-              },
-            },
-            agentOutputs: {
-              status: "text_fallback",
-              generatedAt: generatedAt.toISOString(),
-              expertOutputs: [],
-            },
-          });
-
+          const planText = buildCoachingTextFallback(intakePayload, reason);
           send({
             kind: "plan_text_fallback",
-            planId: fallbackPlan.id,
+            planId,
             reason,
             planText,
           });

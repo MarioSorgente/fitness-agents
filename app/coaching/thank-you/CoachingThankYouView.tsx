@@ -127,6 +127,26 @@ export function CoachingThankYouView({
     const effectiveUserId = userId ?? "anonymous-intake";
     const controller = new AbortController();
 
+    // Pull the validated intake payload stashed by the form so we can drive plan
+    // generation statelessly — serverless storage isn't shared between Lambdas,
+    // so an intakeSubmissionId-only POST would frequently 404.
+    let stashedPayload: Record<string, unknown> | undefined;
+    try {
+      const raw = sessionStorage.getItem("coaching-intake-payload");
+      if (raw) {
+        const parsed = JSON.parse(raw) as {
+          submissionId?: string;
+          userId?: string;
+          payload?: Record<string, unknown>;
+        };
+        if (parsed?.submissionId === submissionId && parsed?.payload) {
+          stashedPayload = parsed.payload;
+        }
+      }
+    } catch {
+      // ignore — we'll fall through to a server lookup which may still work
+    }
+
     (async () => {
       try {
         const response = await fetch("/api/coaching/generate-plan", {
@@ -136,6 +156,7 @@ export function CoachingThankYouView({
             userId: effectiveUserId,
             intakeSubmissionId: submissionId,
             orchestrationMode: "test",
+            ...(stashedPayload ? { intakePayload: stashedPayload } : {}),
           }),
           signal: controller.signal,
         });

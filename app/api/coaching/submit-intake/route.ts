@@ -75,6 +75,10 @@ export async function POST(request: Request) {
       {
         data: {
           submission: serializeIntakeSubmission(submission),
+          // Echo the validated payload so the client can drive plan generation
+          // statelessly — required when serverless storage is per-Lambda and a
+          // later /generate-plan invocation can't look it up.
+          payload: input.payload,
         },
       },
       { status: 201 },

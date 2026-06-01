@@ -657,7 +657,10 @@ export function CoachingIntakeForm() {
         }),
       });
       const result = (await response.json().catch(() => null)) as {
-        data?: { submission?: { id?: string } };
+        data?: {
+          submission?: { id?: string };
+          payload?: Record<string, unknown>;
+        };
         error?: {
           message?: string;
           issues?: Array<{ path: string; message: string }>;
@@ -681,6 +684,19 @@ export function CoachingIntakeForm() {
 
       const submissionId = result?.data?.submission?.id;
       const userId = payload.email ?? "anonymous-intake";
+      // Stash the server-validated payload so the thank-you page can drive plan
+      // generation without a cross-Lambda lookup. SessionStorage scope is the tab,
+      // which matches our usage (form → thank-you in the same tab).
+      const validatedPayload = result?.data?.payload ?? payload;
+      try {
+        sessionStorage.setItem(
+          "coaching-intake-payload",
+          JSON.stringify({ submissionId, userId, payload: validatedPayload }),
+        );
+      } catch {
+        // SessionStorage can fail in private mode or quota — fall through to URL params.
+      }
+
       const params = new URLSearchParams();
       if (submissionId) params.set("submissionId", submissionId);
       params.set("userId", String(userId));
