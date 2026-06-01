@@ -63,11 +63,26 @@ export const coachingPlanSchema = z
   })
   .catchall(jsonValueSchema);
 
-export const pdfGenerationRequestSchema = z.object({
-  userId: z.string().trim().min(1).max(256),
-  planId: z.string().trim().min(1).max(256),
-  includeAppendix: z.boolean().default(true),
-});
+export const pdfGenerationRequestSchema = z
+  .object({
+    userId: z.string().trim().min(1).max(256).optional(),
+    planId: z.string().trim().min(1).max(256).optional(),
+    includeAppendix: z.boolean().default(true),
+    // Inline plan for stateless rendering — required when the repository is ephemeral
+    // (e.g. serverless local-mode) and a lookup by planId would otherwise miss.
+    inlinePlan: z
+      .object({
+        id: z.string().trim().min(1).max(256),
+        userId: z.string().trim().min(1).max(256).optional(),
+        intakeSubmissionId: z.string().trim().min(1).max(256).optional(),
+        plan: coachingPlanContentSchema,
+      })
+      .optional(),
+  })
+  .refine((value) => Boolean(value.inlinePlan || value.planId), {
+    message: "Either inlinePlan or planId must be provided.",
+    path: ["inlinePlan"],
+  });
 
 export type CoachingPlanContent = z.infer<typeof coachingPlanContentSchema>;
 export type CoachingAgentOutputs = z.infer<typeof coachingAgentOutputsSchema>;

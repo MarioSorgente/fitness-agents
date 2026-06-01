@@ -14,6 +14,7 @@ import {
   type CoachingProgressEvent,
   generateCoachingPlan,
 } from "@/lib/coaching/orchestration/generateCoachingPlan";
+import type { CoachingPlanContent } from "@/lib/coaching/schemas/coachingPlanSchema";
 
 export const runtime = "nodejs";
 // Allow up to 5 minutes for the full multi-agent orchestration on Vercel Fluid Compute.
@@ -33,6 +34,11 @@ type StreamEvent =
       kind: "plan_ready";
       planId: string;
       reviewStateId?: string;
+      // Full plan content streamed inline so the client can render the PDF without
+      // a second server round-trip — critical when storage is ephemeral (Vercel local mode).
+      plan: CoachingPlanContent;
+      userId: string;
+      intakeSubmissionId: string;
     }
   | {
       kind: "plan_text_fallback";
@@ -120,7 +126,14 @@ export async function POST(request: Request) {
             status: "in_review",
           });
 
-          send({ kind: "plan_ready", planId: plan.id, reviewStateId: reviewState.id });
+          send({
+            kind: "plan_ready",
+            planId: plan.id,
+            reviewStateId: reviewState.id,
+            plan: plan.plan,
+            userId: plan.userId,
+            intakeSubmissionId: plan.intakeSubmissionId,
+          });
         } catch (agentError) {
           const reason =
             agentError instanceof Error ? agentError.message : "AI provider error";

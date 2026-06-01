@@ -21,7 +21,14 @@ type StreamEvent =
       error: string;
       durationMs: number;
     }
-  | { kind: "plan_ready"; planId: string; reviewStateId?: string }
+  | {
+      kind: "plan_ready";
+      planId: string;
+      reviewStateId?: string;
+      plan: Record<string, unknown>;
+      userId: string;
+      intakeSubmissionId: string;
+    }
   | {
       kind: "plan_text_fallback";
       planId: string;
@@ -45,7 +52,13 @@ type AgentRow = {
 
 type PageStatus =
   | { kind: "generating" }
-  | { kind: "ready"; planId: string }
+  | {
+      kind: "ready";
+      planId: string;
+      plan: Record<string, unknown>;
+      userId: string;
+      intakeSubmissionId: string;
+    }
   | { kind: "text_fallback"; planId: string; reason: string; planText: string }
   | { kind: "error"; message: string };
 
@@ -236,7 +249,13 @@ export function CoachingThankYouView({
           );
           break;
         case "plan_ready":
-          setPage({ kind: "ready", planId: event.planId });
+          setPage({
+            kind: "ready",
+            planId: event.planId,
+            plan: event.plan,
+            userId: event.userId,
+            intakeSubmissionId: event.intakeSubmissionId,
+          });
           break;
         case "plan_text_fallback":
           setPage({
@@ -269,16 +288,29 @@ export function CoachingThankYouView({
     [agents],
   );
 
-  async function handleDownloadPdf(planId: string) {
+  async function handleDownloadPdf(ready: {
+    planId: string;
+    plan: Record<string, unknown>;
+    userId: string;
+    intakeSubmissionId: string;
+  }) {
     setPdf({ kind: "downloading" });
     try {
       const response = await fetch("/api/coaching/generate-pdf", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          userId: userId ?? "anonymous-intake",
-          planId,
+          userId: ready.userId,
+          planId: ready.planId,
           includeAppendix: true,
+          // Send inline so PDF rendering is stateless and works regardless of
+          // whether the server-side store kept the plan around between Lambdas.
+          inlinePlan: {
+            id: ready.planId,
+            userId: ready.userId,
+            intakeSubmissionId: ready.intakeSubmissionId,
+            plan: ready.plan,
+          },
         }),
       });
 
@@ -302,7 +334,7 @@ export function CoachingThankYouView({
       link.href = url;
       const disposition = response.headers.get("Content-Disposition") ?? "";
       const filenameMatch = disposition.match(/filename="?([^";]+)"?/i);
-      link.download = filenameMatch?.[1] ?? `coaching-plan-${planId}.pdf`;
+      link.download = filenameMatch?.[1] ?? `coaching-plan-${ready.planId}.pdf`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -389,7 +421,14 @@ export function CoachingThankYouView({
           <div className="button-row">
             <button
               type="button"
-              onClick={() => handleDownloadPdf(page.planId)}
+              onClick={() =>
+                handleDownloadPdf({
+                  planId: page.planId,
+                  plan: page.plan,
+                  userId: page.userId,
+                  intakeSubmissionId: page.intakeSubmissionId,
+                })
+              }
               disabled={pdf.kind === "downloading"}
             >
               {pdf.kind === "downloading" ? "Preparing PDF…" : "Download PDF"}
