@@ -118,3 +118,63 @@ Start each future task with this sequence:
 8. For Firestore changes, edit the repository interface before the Firebase implementation and keep route handlers behind repository calls.
 9. Run formatting and build checks before handing off.
 10. Document any remaining assumptions or TODOs in the final response and, if durable, in this file.
+
+## Intake submission debugging
+
+Public intake submission does not require Firebase Auth. The public route writes through the
+configured coaching repository and logs only safe metadata such as route name, timestamp,
+orchestration mode, safety status, and a hashed user identifier. Do not log raw intake or health
+answers.
+
+### Vercel logs
+
+For deployed failures, open the Vercel project, select the latest deployment, and check **Logs** for
+`[coaching-api] route error`. Function logs for `/api/coaching/submit-intake`,
+`/api/coaching/generate-plan`, and `/api/coaching/test-orchestration` should show the failing route,
+operation, timestamp, error name, and safe metadata.
+
+### Repository mode
+
+- `COACHING_REPOSITORY=local` forces the local JSON repository. Use this for local development or
+  temporary smoke testing without Firestore.
+- `COACHING_REPOSITORY=firebase` forces Firestore. If Firebase Admin credentials are incomplete, the
+  API returns: `Firebase repository selected but Firebase Admin credentials are incomplete. Set
+FIREBASE_SERVICE_ACCOUNT_KEY or FIREBASE_PROJECT_ID + FIREBASE_CLIENT_EMAIL + FIREBASE_PRIVATE_KEY.`
+- If `COACHING_REPOSITORY` is unset and complete Firebase Admin credentials are present, Firestore is
+  used automatically.
+- If `COACHING_REPOSITORY` is unset and Firebase Admin credentials are absent in local development,
+  the app falls back to local repository mode.
+- In Vercel production, configure Firebase Admin credentials or explicitly force local mode only for
+  short-lived testing. Production should normally use Firestore.
+
+### Firebase Admin env vars
+
+Use one of these server-only credential strategies:
+
+1. `FIREBASE_SERVICE_ACCOUNT_KEY` containing the full service-account JSON string.
+2. `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, and `FIREBASE_PRIVATE_KEY` together. Store private
+   key newlines as escaped `\n` if the host requires a single-line env var.
+3. `GOOGLE_APPLICATION_CREDENTIALS` in environments where Application Default Credentials are
+   available.
+
+Never expose Firebase Admin values with `NEXT_PUBLIC_` prefixes.
+
+## Test intake and orchestration smoke tests
+
+The intake form shows **Fill test intake** and **Jump to final step** when `NODE_ENV !== "production"`
+or `NEXT_PUBLIC_ENABLE_TEST_INTAKE=true`. The helper fills a safe fake intake, accepts Privacy and
+Terms, and keeps `orchestrationMode` as `test`.
+
+`POST /api/coaching/test-orchestration` is an admin-only smoke test protected by `ADMIN_ACCESS_KEY`.
+Pass the key in `x-admin-access-key` or `Authorization: Bearer <key>`. The endpoint runs a safe fake
+intake through `generateCoachingPlan` in `test` mode and returns success status, provider/model route
+metadata, completed steps, validation status, and final plan keys without returning secrets or real
+client data.
+
+## Cheap test-mode AI routing
+
+`orchestrationMode: "test"` routes every step, including `final_moderator`, through the cheapest fast
+route order: Kimi fast first when `KIMI_API_KEY` or `MOONSHOT_API_KEY` is configured, then OpenAI fast,
+then Anthropic fast. The default OpenAI fast model is `gpt-4.1-nano` unless `OPENAI_MODEL_FAST` is set.
+Production mode still uses fast routes for expert-panel work and the configured premium/main route for
+final synthesis.

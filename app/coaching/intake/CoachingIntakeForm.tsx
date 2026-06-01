@@ -14,6 +14,137 @@ type SubmissionState =
   | { status: "submitting" }
   | { status: "error"; message: string };
 
+const TEST_HELPER_ENABLED =
+  process.env.NODE_ENV !== "production" || process.env.NEXT_PUBLIC_ENABLE_TEST_INTAKE === "true";
+
+const PAR_Q_REQUIRED_FIELDS = [
+  "diagnosedHeartConditionAndOnlySupervisedActivity",
+  "bloodPressureOrHeartMedication",
+  "chestPainDuringActivity",
+  "dizzinessOrLossOfConsciousnessLast12Months",
+  "boneJointSoftTissueProblemAggravatedByActivity",
+  "chestPainLast30Days",
+  "otherReasonNotToExercise",
+] as const;
+
+function createNoAnswer() {
+  return { answer: "no", explanation: "" };
+}
+
+function createTestFormData(): IntakeFormData {
+  const data = createInitialFormData();
+
+  Object.assign(data, {
+    orchestrationMode: "test",
+    fullName: "Test Client",
+    email: "test.client@example.com",
+    age: "34",
+    sex: "female",
+    height: "5'7\"",
+    weight: "155 lb",
+    mainGoal: "muscle_gain",
+    specificGoalDescription:
+      "I want to build lean muscle, improve consistency, and train without irritating mild shoulder, elbow, or knee discomfort.",
+    secondaryGoals: ["strength", "confidence", "energy"],
+    goalPriority: "aesthetic_transformation",
+    desiredOutcome:
+      "A realistic 3-day plan that helps me feel stronger, move well, and stay consistent for the next 12 weeks.",
+    motivation: "I am ready to get into a sustainable routine.",
+    biggestStruggle: "Staying consistent when work gets busy.",
+    confidenceLevel: "7",
+    preferredCoachingStyle: ["structured", "educational", "accountability_focused"],
+    trainingLevel: "intermediate",
+    currentWeeklyActivity: "Two casual lifting sessions and weekend walks most weeks.",
+    usedToVigorousExercise: { answer: "yes", explanation: "Comfortable with moderate lifting." },
+    availableDaysPerWeek: "3",
+    preferredTrainingDays: ["monday", "wednesday", "friday"],
+    sessionDurationMinutes: "60",
+    trainingLocation: "gym",
+    equipmentAvailable: ["full_gym", "dumbbells", "machines"],
+    currentProgram: "No formal program right now.",
+    likedExercises: "Dumbbell presses, rows, leg press, cable work, and walking.",
+    dislikedExercises: "High-impact jumping.",
+    exercisesThatCausePain:
+      "Mild shoulder discomfort with heavy overhead pressing, mild elbow discomfort with very heavy curls, and mild knee irritation with deep high-volume lunges.",
+    movementsThatFeelGood:
+      "Controlled rows, machines, split squats to a comfortable range, and incline walking.",
+    currentlyFeelingUnwell: createNoAnswer(),
+    pregnancyOrPossiblePregnancy: createNoAnswer(),
+    recentHealthChange: createNoAnswer(),
+    medications: [],
+    allergies: "None known.",
+    diagnosedHighBloodPressure: createNoAnswer(),
+    diagnosedBoneOrJointProblem: createNoAnswer(),
+    over65: "no",
+    experiencedChestPainExerciseOrStress: createNoAnswer(),
+    experiencedShortnessOfBreath: createNoAnswer(),
+    experiencedFaintingOrLightheadedness: createNoAnswer(),
+    recentHospitalization: createNoAnswer(),
+    orthopedicConditions: createNoAnswer(),
+    rapidHeartbeatOrPalpitations: createNoAnswer(),
+    reasonNotToFollowRegularProgram: createNoAnswer(),
+    diagnosedConditions: [],
+    painAreas: [
+      {
+        area: "shoulder_clavicle",
+        currentlyHasPain: "yes",
+        hadPainPreviously: "yes",
+        severity: "2",
+        description: "Mild occasional shoulder irritation during heavy overhead pressing.",
+        triggers: "Heavy overhead pressing or too much volume too quickly.",
+        movementsThatMakeItBetter: "Warm-ups, neutral-grip pressing, and controlled tempo.",
+        painDuringExercise: "Mild only; stops when load or range is adjusted.",
+        currentlyTreatingIt: "no",
+      },
+    ],
+    physicalLimitationsAggravatedByExercise: createNoAnswer(),
+    movementsExercisesPositionsAvoided:
+      "Avoids maximal overhead pressing and deep painful knee ranges.",
+    toldToAvoidActivities: createNoAnswer(),
+    surgeries: [],
+    currentPhysioOrDoctorCare: createNoAnswer(),
+    knownDiagnoses: "No known diagnoses reported in this test intake.",
+    smoking: "no",
+    caffeine: "once_per_day",
+    alcohol: "few_times_per_month",
+    sleepHours: "five_to_seven",
+    sleepQuality: "average",
+    energyLevel: "moderate",
+    workActivityLevel: "sedentary_occupational_and_light_recreational_effort",
+    stressWork: "moderate",
+    stressHome: "minimal",
+    worksMoreThan40Hours: "yes",
+    consistencyChallenges: ["lack_of_time", "work_schedule", "confusion_about_what_to_do"],
+    currentMoodAroundFitness: "Motivated but wants a plan that is not overwhelming.",
+    bodyConfidence: "Would like to feel more confident and athletic.",
+    accountabilityPreference: ["detailed_plan", "progress_tracking", "education_explanations"],
+    realisticPlanRequirements:
+      "Three focused gym sessions with simple progression and no red-flag pain.",
+    foodAllergies: "None.",
+    foodIntolerances: "None.",
+    foodsAvoided: "No strict avoidances.",
+    foodsLoved: "Greek yogurt, chicken, rice bowls, fruit, eggs, and smoothies.",
+    mealsPerDay: "3",
+    typicalBreakfast: "Greek yogurt with berries and granola.",
+    typicalLunch: "Chicken rice bowl with vegetables.",
+    typicalDinner: "Protein, vegetables, and potatoes or rice.",
+    typicalSnacks: "Fruit, protein shake, or nuts.",
+    waterIntake: "About 2 liters per day.",
+    currentNutritionBehavior:
+      "Generally balanced meals, but protein and meal prep are inconsistent during busy work weeks.",
+    appetiteLevel: "normal",
+    dietaryRestrictions: "No medical diet; prefers simple high-protein meals.",
+    privacyPolicyAccepted: true,
+    termsAndConditionsAccepted: true,
+  });
+
+  PAR_Q_REQUIRED_FIELDS.forEach((fieldName) => {
+    data[fieldName] = createNoAnswer();
+  });
+
+  return data;
+}
+
 function getDefaultValue(field: IntakeField): unknown {
   if (field.type === "multi-select" || field.type === "repeatable_group") {
     return [];
@@ -159,6 +290,30 @@ function buildPayload(formData: IntakeFormData): CoachingIntakeInput {
 }
 
 function FieldLabel({ field }: { field: IntakeField }) {
+  if (field.name === "privacyPolicyAccepted") {
+    return (
+      <span>
+        I have read and agree to the{" "}
+        <a href="/privacy" onClick={(event) => event.stopPropagation()}>
+          Privacy Policy
+        </a>
+        . {field.required ? <span className="required-mark">*</span> : null}
+      </span>
+    );
+  }
+
+  if (field.name === "termsAndConditionsAccepted") {
+    return (
+      <span>
+        I have read and agree to the{" "}
+        <a href="/terms" onClick={(event) => event.stopPropagation()}>
+          Terms and Conditions
+        </a>
+        . {field.required ? <span className="required-mark">*</span> : null}
+      </span>
+    );
+  }
+
   return (
     <span>
       {field.label} {field.required ? <span className="required-mark">*</span> : null}
@@ -465,6 +620,18 @@ export function CoachingIntakeForm() {
     [currentStep],
   );
 
+  function fillTestIntake() {
+    setFormData(createTestFormData());
+    setStepErrors([]);
+    setSubmissionState({ status: "idle" });
+  }
+
+  function jumpToFinalStep() {
+    setCurrentStep(intakeSections.length - 1);
+    setStepErrors([]);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
   function goToNextStep() {
     const errors = collectRequiredErrors(currentSection.fields, formData);
     if (errors.length > 0) {
@@ -590,6 +757,16 @@ export function CoachingIntakeForm() {
           </span>
           <strong>{progress}% complete</strong>
         </div>
+        {TEST_HELPER_ENABLED ? (
+          <div className="test-helper-actions" aria-label="Intake test helpers">
+            <button className="secondary-button" onClick={fillTestIntake} type="button">
+              Fill test intake
+            </button>
+            <button className="text-button" onClick={jumpToFinalStep} type="button">
+              Jump to final step
+            </button>
+          </div>
+        ) : null}
         <div className="progress-track" aria-hidden="true">
           <span style={{ width: `${progress}%` }} />
         </div>

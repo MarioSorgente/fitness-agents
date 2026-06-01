@@ -523,3 +523,19 @@ button:disabled {
 .terms-panel p {
   color: var(--muted);
 }
+
+.test-helper-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.legal-page {
+  padding-block: 4rem;
+}
+
+.legal-page h1,
+.legal-page h2 {
+  color: var(--foreground);
+}

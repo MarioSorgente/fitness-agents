@@ -11,7 +11,6 @@ This folder is for:
 
 Mario should edit this folder when changing global PDF styling, page layout, document metadata, or export behavior. Edit `sections/` for individual content blocks inside the PDF.
 
-
 ## v1 behavior
 
 PDFs are generated only after the associated coaching plan review state is `approved`. The
