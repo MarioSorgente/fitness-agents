@@ -6,6 +6,7 @@ import {
   parseJsonBody,
 } from "@/lib/coaching/api/routeUtils";
 import { createCoachingRepository } from "@/lib/coaching/db/coachingRepositoryFactory";
+import { markdownPdfFilename, renderMarkdownPdf } from "@/lib/coaching/pdf/renderMarkdownPdf";
 import { coachingPlanPdfFilename, renderCoachingPlanPdf } from "@/lib/coaching/pdf/renderPdf";
 import {
   type CoachingPlan,
@@ -15,9 +16,30 @@ import {
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
+function pdfResponse(buffer: Buffer, filename: string) {
+  return new NextResponse(new Uint8Array(buffer), {
+    headers: {
+      "Cache-Control": "private, no-store",
+      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Content-Length": String(buffer.byteLength),
+      "Content-Type": "application/pdf",
+    },
+    status: 200,
+  });
+}
+
 export async function POST(request: Request) {
   try {
     const input = pdfGenerationRequestSchema.parse(await parseJsonBody(request));
+
+    // Primary path: render the (edited) Markdown document directly.
+    if (input.markdown) {
+      const buffer = renderMarkdownPdf(input.markdown, {
+        title: input.documentTitle,
+        subject: "Coaching document",
+      });
+      return pdfResponse(buffer, markdownPdfFilename(input.planId));
+    }
 
     let plan: CoachingPlan;
 

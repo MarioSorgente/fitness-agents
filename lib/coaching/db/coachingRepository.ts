@@ -97,6 +97,8 @@ export interface CoachingRepository {
   createIntakeSubmission(input: CreateIntakeSubmissionInput): Promise<IntakeSubmission>;
   getIntakeSubmission(id: string): Promise<IntakeSubmission | null>;
   listIntakeSubmissions(options: ListByUserOptions): Promise<IntakeSubmission[]>;
+  // Admin-facing: every submission across all users, newest first.
+  listAllIntakeSubmissions(limit?: number): Promise<IntakeSubmission[]>;
   updateIntakeSubmission(
     id: string,
     updates: Partial<Pick<IntakeSubmission, "payload" | "status" | "submittedAt">>,

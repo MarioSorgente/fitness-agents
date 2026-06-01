@@ -32,6 +32,9 @@ export const coachingPlanContentSchema = z
       })
       .catchall(jsonValueSchema)
       .optional(),
+    // Editable, human-readable coaching document (intake summary + plan). This is the
+    // artifact the admin edits and exports to PDF; `content` keeps the structured JSON.
+    markdown: z.string().max(200_000).optional(),
     content: jsonObjectSchema.default({}),
   })
   .catchall(jsonValueSchema);
@@ -68,6 +71,9 @@ export const pdfGenerationRequestSchema = z
     userId: z.string().trim().min(1).max(256).optional(),
     planId: z.string().trim().min(1).max(256).optional(),
     includeAppendix: z.boolean().default(true),
+    // Primary path: render the edited Markdown document directly to PDF.
+    markdown: z.string().min(1).max(200_000).optional(),
+    documentTitle: z.string().trim().max(256).optional(),
     // Inline plan for stateless rendering — required when the repository is ephemeral
     // (e.g. serverless local-mode) and a lookup by planId would otherwise miss.
     inlinePlan: z
@@ -79,9 +85,9 @@ export const pdfGenerationRequestSchema = z
       })
       .optional(),
   })
-  .refine((value) => Boolean(value.inlinePlan || value.planId), {
-    message: "Either inlinePlan or planId must be provided.",
-    path: ["inlinePlan"],
+  .refine((value) => Boolean(value.markdown || value.inlinePlan || value.planId), {
+    message: "Either markdown, inlinePlan, or planId must be provided.",
+    path: ["markdown"],
   });
 
 export type CoachingPlanContent = z.infer<typeof coachingPlanContentSchema>;
