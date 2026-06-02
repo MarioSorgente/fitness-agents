@@ -8,12 +8,14 @@ export type CoachingStepId =
   | "intake_compression"
   | "medical_safety_screener"
   | "physio_reviewer"
-  | "fitness_coach"
   | "mobility_coach"
-  | "nutrition_reviewer"
   | "panel_brief"
   | "training_plan_writer"
-  | "nutrition_plan_writer";
+  | "nutrition_plan_writer"
+  // Cross-challenge round: each writer reviews the other's draft and revises for a coherent,
+  // mutually-consistent combined plan.
+  | "training_plan_challenge"
+  | "nutrition_plan_challenge";
 
 export type CoachingStepRoute = {
   provider: CoachingAiProviderId;
@@ -50,9 +52,7 @@ export const CHEAP_OR_HEAVY_STEPS: readonly CoachingStepId[] = [
   "intake_compression",
   "medical_safety_screener",
   "physio_reviewer",
-  "fitness_coach",
   "mobility_coach",
-  "nutrition_reviewer",
   "panel_brief",
 ] as const;
 
@@ -61,6 +61,8 @@ export const CHEAP_OR_HEAVY_STEPS: readonly CoachingStepId[] = [
 export const FINAL_WRITER_STEPS: readonly CoachingStepId[] = [
   "training_plan_writer",
   "nutrition_plan_writer",
+  "training_plan_challenge",
+  "nutrition_plan_challenge",
 ] as const;
 
 function isFinalWriterStep(step: CoachingStepId): boolean {

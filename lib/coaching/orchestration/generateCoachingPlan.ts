@@ -28,7 +28,9 @@ import {
   buildExpertSystemPrompt,
   buildExpertUserPrompt,
   buildIntakeCompressionUserPrompt,
+  buildNutritionPlanChallengePrompt,
   buildNutritionPlanWriterSystemPrompt,
+  buildTrainingPlanChallengePrompt,
   buildTrainingPlanWriterSystemPrompt,
   describePlanDuration,
   EXPERT_STEPS,
@@ -82,12 +84,12 @@ export const COACHING_AGENT_TIMELINE: ReadonlyArray<{ step: CoachingStepId; titl
   { step: "intake_compression", title: "Intake compression" },
   { step: "medical_safety_screener", title: "Medical safety screener" },
   { step: "physio_reviewer", title: "Physio reviewer" },
-  { step: "fitness_coach", title: "Fitness coach" },
   { step: "mobility_coach", title: "Mobility coach" },
-  { step: "nutrition_reviewer", title: "Nutrition reviewer" },
   { step: "panel_brief", title: "Panel brief" },
-  { step: "training_plan_writer", title: "Training plan writer" },
-  { step: "nutrition_plan_writer", title: "Nutrition plan writer" },
+  { step: "training_plan_writer", title: "Training plan — draft" },
+  { step: "nutrition_plan_writer", title: "Nutrition plan — draft" },
+  { step: "training_plan_challenge", title: "Training plan — cross-review" },
+  { step: "nutrition_plan_challenge", title: "Nutrition plan — cross-review" },
 ];
 
 type StepRun = {
@@ -189,12 +191,10 @@ function routingMetadata(mode: CoachingOrchestrationMode): JsonObject {
       "intake_compression",
       "medical_safety_screener",
       "physio_reviewer",
-      "fitness_coach",
       "mobility_coach",
-      "nutrition_reviewer",
       "panel_brief",
     ],
-    cheapAndHeavyRoutes: getRoutesForStep("fitness_coach", mode).map((route) => ({ ...route })),
+    cheapAndHeavyRoutes: getRoutesForStep("mobility_coach", mode).map((route) => ({ ...route })),
     finalWriterRoutes: getRoutesForStep("training_plan_writer", mode).map((route) => ({ ...route })),
   };
 }
@@ -230,6 +230,38 @@ async function runStep(
     });
     throw error;
   }
+}
+
+// Runs one premium "writer" step (a plan draft or its cross-review revision) and wraps it.
+async function runWriterStep(
+  providers: CoachingAiProviderRegistry,
+  step: CoachingStepId,
+  title: string,
+  mode: CoachingOrchestrationMode,
+  systemPrompt: string,
+  userMessage: string,
+  maxTokens: number,
+  onProgress?: (event: CoachingProgressEvent) => void,
+): Promise<StepRun> {
+  return completionToStepRun(
+    step,
+    title,
+    await runStep(
+      providers,
+      step,
+      title,
+      mode,
+      {
+        temperature: 0.3,
+        maxTokens,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userMessage },
+        ],
+      },
+      onProgress,
+    ),
+  );
 }
 
 export async function generateCoachingPlan({
@@ -272,33 +304,36 @@ export async function generateCoachingPlan({
   }
   const compressedIntakeText = JSON.stringify(compressedIntake);
 
-  const expertRuns: StepRun[] = [];
-
-  for (const expert of EXPERT_STEPS) {
-    const completion = await runStep(
-      providers,
-      expert.id,
-      expert.title,
-      mode,
-      {
-        temperature: 0.2,
-        maxTokens: 2200,
-        messages: [
+  // The panel reviewers are independent given the compressed intake, so run them in parallel.
+  const expertRuns: StepRun[] = await Promise.all(
+    EXPERT_STEPS.map(async (expert) =>
+      completionToStepRun(
+        expert.id,
+        expert.title,
+        await runStep(
+          providers,
+          expert.id,
+          expert.title,
+          mode,
           {
-            role: "system",
-            content: buildExpertSystemPrompt(expert.title, expert.instruction),
+            temperature: 0.2,
+            maxTokens: 2200,
+            messages: [
+              {
+                role: "system",
+                content: buildExpertSystemPrompt(expert.title, expert.instruction),
+              },
+              {
+                role: "user",
+                content: buildExpertUserPrompt(compressedIntakeText),
+              },
+            ],
           },
-          {
-            role: "user",
-            content: buildExpertUserPrompt(compressedIntakeText),
-          },
-        ],
-      },
-      onProgress,
-    );
-
-    expertRuns.push(completionToStepRun(expert.id, expert.title, completion));
-  }
+          onProgress,
+        ),
+      ),
+    ),
+  );
 
   const expertOutputs = expertRuns.map(stepRunToExpertOutput);
 
@@ -335,66 +370,80 @@ export async function generateCoachingPlan({
 
   // Shared context for both writers. They receive the panel brief and the chosen duration so
   // they prescribe a complete, phased program rather than a vague outline.
+  const NUTRITION_MAX_TOKENS = 5500;
+  const planDurationContext = { weeks: planDuration.weeks, label: planDuration.label };
   const writerUserMessage = JSON.stringify({
     compressedIntake,
     panelBrief: panelBriefOutput,
-    planDuration: { weeks: planDuration.weeks, label: planDuration.label },
+    planDuration: planDurationContext,
   });
 
-  const trainingPlanWriter = completionToStepRun(
-    "training_plan_writer",
-    "Training plan writer",
-    await runStep(
+  // ROUND 1 — DRAFT. The two domain writers work independently and in parallel (async).
+  const [trainingDraft, nutritionDraft] = await Promise.all([
+    runWriterStep(
       providers,
       "training_plan_writer",
-      "Training plan writer",
+      "Training plan — draft",
       mode,
-      {
-        temperature: 0.3,
-        maxTokens: planDuration.trainingMaxTokens,
-        messages: [
-          {
-            role: "system",
-            content: buildTrainingPlanWriterSystemPrompt(planDuration),
-          },
-          {
-            role: "user",
-            content: writerUserMessage,
-          },
-        ],
-      },
+      buildTrainingPlanWriterSystemPrompt(planDuration),
+      writerUserMessage,
+      planDuration.trainingMaxTokens,
       onProgress,
     ),
-  );
-
-  const nutritionPlanWriter = completionToStepRun(
-    "nutrition_plan_writer",
-    "Nutrition plan writer",
-    await runStep(
+    runWriterStep(
       providers,
       "nutrition_plan_writer",
-      "Nutrition plan writer",
+      "Nutrition plan — draft",
       mode,
-      {
-        temperature: 0.3,
-        maxTokens: 5500,
-        messages: [
-          {
-            role: "system",
-            content: buildNutritionPlanWriterSystemPrompt(planDuration),
-          },
-          {
-            role: "user",
-            content: writerUserMessage,
-          },
-        ],
-      },
+      buildNutritionPlanWriterSystemPrompt(planDuration),
+      writerUserMessage,
+      NUTRITION_MAX_TOKENS,
       onProgress,
     ),
-  );
+  ]);
 
-  // Assemble the two halves into the single Part 2 plan body (intake summary + disclaimer are
-  // added by assemblePlanDocument upstream). Both halves use `###` sections so they read as one
+  // ROUND 2 — CROSS-CHALLENGE. Each writer sees the other's draft, challenges it, and revises its
+  // own half so training and nutrition are mutually consistent. Run in parallel too.
+  const trainingChallengeMessage = JSON.stringify({
+    compressedIntake,
+    panelBrief: panelBriefOutput,
+    planDuration: planDurationContext,
+    yourTrainingDraft: trainingDraft.content,
+    nutritionCoachDraft: nutritionDraft.content,
+  });
+  const nutritionChallengeMessage = JSON.stringify({
+    compressedIntake,
+    panelBrief: panelBriefOutput,
+    planDuration: planDurationContext,
+    yourNutritionDraft: nutritionDraft.content,
+    trainingCoachDraft: trainingDraft.content,
+  });
+
+  const [trainingPlanWriter, nutritionPlanWriter] = await Promise.all([
+    runWriterStep(
+      providers,
+      "training_plan_challenge",
+      "Training plan — cross-review",
+      mode,
+      buildTrainingPlanChallengePrompt(planDuration),
+      trainingChallengeMessage,
+      planDuration.trainingMaxTokens,
+      onProgress,
+    ),
+    runWriterStep(
+      providers,
+      "nutrition_plan_challenge",
+      "Nutrition plan — cross-review",
+      mode,
+      buildNutritionPlanChallengePrompt(planDuration),
+      nutritionChallengeMessage,
+      NUTRITION_MAX_TOKENS,
+      onProgress,
+    ),
+  ]);
+
+  // Assemble the two revised halves into the single Part 2 plan body (intake summary + disclaimer
+  // are added by assemblePlanDocument upstream). Both halves use `###` sections so they read as one
   // consistent document; a rule separates training from nutrition.
   const planMarkdown = [
     trainingPlanWriter.content.trim(),
@@ -441,6 +490,10 @@ export async function generateCoachingPlan({
       compressedIntake,
       expertOutputs,
       panelBrief: panelBriefOutput,
+      // Round 1 drafts kept alongside the round 2 (cross-reviewed) finals — diffing draft vs final
+      // is the audit log of what each coach changed after challenging the other.
+      trainingPlanDraft: { ...trainingDraft },
+      nutritionPlanDraft: { ...nutritionDraft },
       trainingPlanWriter: { ...trainingPlanWriter },
       nutritionPlanWriter: { ...nutritionPlanWriter },
       rawIntakeDistribution:

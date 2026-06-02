@@ -92,7 +92,7 @@ CLIENT                          ADMIN (coach)                         AI PANEL (
                                      │ picks Plan length + Quality, clicks Generate
                                      │ POST /api/coaching/generate-plan (SSE stream)
                                      ▼
-                          generateCoachingPlan()  ───────────────►  9-step pipeline (§5)
+                          generateCoachingPlan()  ───────────────►  agent pipeline (§5)
                                      │                               emits step_started/…/step_completed
                                      │  assemblePlanDocument():
                                      │   Part 1 = deterministic intake summary
@@ -114,27 +114,42 @@ later agent sees only the privacy‑minimized brief.
 
 ---
 
-## 5. The AI agent pipeline (9 steps)
+## 5. The AI agent pipeline (9 calls, 4 waves)
 
 Defined and sequenced in
 [lib/coaching/orchestration/generateCoachingPlan.ts](../lib/coaching/orchestration/generateCoachingPlan.ts).
 That file only **wires** the steps — all prompt wording lives in `lib/coaching/prompts/` (§6).
+The reviewers run **in parallel**, and the two domain writers run **async, then challenge each
+other** before finalizing — so the wall‑clock is ~4 sequential waves, not 9.
 
-| # | Step id | Role | Model tier | Output |
-| - | --- | --- | --- | --- |
-| 1 | `intake_compression` | Distills raw intake → privacy‑minimized JSON brief (only step that sees raw intake) | fast | JSON brief |
-| 2 | `medical_safety_screener` | Flags medical red flags / clearance needs | fast | JSON (findings/recommendations/risks/followUps) |
-| 3 | `physio_reviewer` | Movement limits, pain, regressions/progressions | fast | JSON |
-| 4 | `fitness_coach` | Concrete training direction (split, exercises, schemes) | fast | JSON |
-| 5 | `mobility_coach` | Mobility / warm‑up / recovery priorities | fast | JSON |
-| 6 | `nutrition_reviewer` | Calorie/macro targets, restrictions, eating approaches | fast | JSON |
-| 7 | `panel_brief` | Merges experts → agreements/conflicts/safety gates/direction | fast | JSON |
-| 8 | `training_plan_writer` | Writes TRAINING half as Markdown (named split, day‑by‑day exercise tables, phased progression) | **main (premium)** | Markdown |
-| 9 | `nutrition_plan_writer` | Writes NUTRITION half as Markdown (daily targets, Mon–Fri meal table, alternatives, per‑phase scaling) | **main (premium)** | Markdown |
+| # | Step id | Wave | Role | Model tier | Output |
+| - | --- | --- | --- | --- | --- |
+| 1 | `intake_compression` | 1 | Distills raw intake → privacy‑minimized JSON brief (only step that sees raw intake) | fast | JSON brief |
+| 2 | `medical_safety_screener` | 2 (parallel) | Flags medical red flags / clearance needs | fast | JSON (findings/recommendations/risks/followUps) |
+| 3 | `physio_reviewer` | 2 (parallel) | Movement limits, pain, regressions/progressions | fast | JSON |
+| 4 | `mobility_coach` | 2 (parallel) | Mobility / warm‑up / recovery priorities | fast | JSON |
+| 5 | `panel_brief` | 3 | Merges reviewers → agreements/conflicts/safety gates/direction | fast | JSON |
+| 6 | `training_plan_writer` | 4a (parallel) | **Draft**: designs + writes the TRAINING half (absorbs `fitness_coach`) — split, day‑by‑day tables, phased progression | **main** | Markdown |
+| 7 | `nutrition_plan_writer` | 4a (parallel) | **Draft**: analyzes + writes the NUTRITION half (absorbs `nutrition_reviewer`) — targets, Mon–Fri meals, alternatives | **main** | Markdown |
+| 8 | `training_plan_challenge` | 4b (parallel) | **Cross‑review**: reads the nutrition draft, challenges it (fueling/recovery/protein), revises the training plan to match | **main** | Markdown (final) |
+| 9 | `nutrition_plan_challenge` | 4b (parallel) | **Cross‑review**: reads the training draft, challenges it (recoverability/timing/volume), revises the nutrition plan to match | **main** | Markdown (final) |
 
-Steps 1 + 7 are synthesis glue; 2–6 are the parallel‑style "panel"; 8–9 are the client‑facing
-writers. The two writer outputs are concatenated (training, a `---` rule, then nutrition) to form
-Part 2 of the document.
+Step 1 + 5 are synthesis glue; 2–4 are the cheap safety/movement "panel" of reviewers (parallel);
+6–9 are the client‑facing writers that each **own their domain end‑to‑end** (analysis + writing).
+The two **final** (challenge) outputs are concatenated (training, a `---` rule, then nutrition) to
+form Part 2. The round‑1 drafts are kept in `agentOutputs` so diffing draft vs final is the audit
+log of what each coach changed after the cross‑review.
+
+> **Why a challenge round?** The training and nutrition agents must agree — calories must fuel the
+> prescribed volume, protein must support recovery, hard sessions must sit on higher‑fuel days. So
+> they draft independently (async), then each critiques the other's draft and revises its own half
+> for one coherent combined plan. Each writer's `### Coaching tips` ends with a `**… alignment:**`
+> note recording what was reconciled.
+>
+> **Why these reviewers stay separate.** The per‑domain "analyst + writer" pairs were merged (a
+> premium writer that reasons and writes in one pass beats relaying a cheap analyst's JSON through
+> `panel_brief`). But the **safety** reviewers (medical, physio) and `mobility_coach` stay separate
+> — they gate the plan rather than author it.
 
 **Plan length** (`planDurationWeeks` = 1 / 4 / 12 / 24) controls how many training **phases** the
 writers produce and their output‑token budget — see
@@ -158,18 +173,20 @@ repeats this table.
 | 1 | `intake_compression` | [agents/intakeCompression.ts](../lib/coaching/prompts/agents/intakeCompression.ts) |
 | 2 | `medical_safety_screener` | [agents/medicalSafetyScreener.ts](../lib/coaching/prompts/agents/medicalSafetyScreener.ts) |
 | 3 | `physio_reviewer` | [agents/physioReviewer.ts](../lib/coaching/prompts/agents/physioReviewer.ts) |
-| 4 | `fitness_coach` | [agents/fitnessCoach.ts](../lib/coaching/prompts/agents/fitnessCoach.ts) |
-| 5 | `mobility_coach` | [agents/mobilityCoach.ts](../lib/coaching/prompts/agents/mobilityCoach.ts) |
-| 6 | `nutrition_reviewer` | [agents/nutritionReviewer.ts](../lib/coaching/prompts/agents/nutritionReviewer.ts) |
-| 7 | `panel_brief` | [agents/panelBrief.ts](../lib/coaching/prompts/agents/panelBrief.ts) |
-| 8 | `training_plan_writer` | [agents/trainingPlanWriter.ts](../lib/coaching/prompts/agents/trainingPlanWriter.ts) |
-| 9 | `nutrition_plan_writer` | [agents/nutritionPlanWriter.ts](../lib/coaching/prompts/agents/nutritionPlanWriter.ts) |
+| 4 | `mobility_coach` | [agents/mobilityCoach.ts](../lib/coaching/prompts/agents/mobilityCoach.ts) |
+| 5 | `panel_brief` | [agents/panelBrief.ts](../lib/coaching/prompts/agents/panelBrief.ts) |
+| 6 + 8 | `training_plan_writer` / `training_plan_challenge` | [agents/trainingPlanWriter.ts](../lib/coaching/prompts/agents/trainingPlanWriter.ts) |
+| 7 + 9 | `nutrition_plan_writer` / `nutrition_plan_challenge` | [agents/nutritionPlanWriter.ts](../lib/coaching/prompts/agents/nutritionPlanWriter.ts) |
+
+> Each writer file exports **two** prompts: `buildXxxWriterSystemPrompt` (the draft) and
+> `buildXxxChallengePrompt` (the cross‑review revision). The former `fitness_coach` and
+> `nutrition_reviewer` files were removed — their reasoning now lives inside these two writers.
 
 ### Shared fragments — `prompts/shared/`
 
 | File | What it controls |
 | --- | --- |
-| [shared/expertSystemTemplate.ts](../lib/coaching/prompts/shared/expertSystemTemplate.ts) | The role wrapper + strict JSON output contract shared by steps **2–6**, plus the user message handing them the compressed intake. Edit once → affects all five reviewers. |
+| [shared/expertSystemTemplate.ts](../lib/coaching/prompts/shared/expertSystemTemplate.ts) | The role wrapper + strict JSON output contract shared by the panel reviewers (steps **2–4**), plus the user message handing them the compressed intake. Edit once → affects all three reviewers. |
 | [shared/planDuration.ts](../lib/coaching/prompts/shared/planDuration.ts) | The phase/progression wording for 1 / 4 / 12 / 24‑week plans (injected into the training writer) and the per‑length output‑token budget. |
 
 ### Convention
@@ -199,7 +216,7 @@ repeats this table.
 | [app/admin/submissions/actions.ts](../app/admin/submissions/actions.ts) | Server actions for the admin list |
 
 ### `lib/coaching/orchestration/`
-- [generateCoachingPlan.ts](../lib/coaching/orchestration/generateCoachingPlan.ts) — runs the 9 steps, assembles `planMarkdown`, returns `{ plan, planMarkdown, agentOutputs }`. Exports `COACHING_AGENT_TIMELINE` and re‑exports `PLAN_DURATION_WEEKS` / `DEFAULT_PLAN_DURATION_WEEKS`.
+- [generateCoachingPlan.ts](../lib/coaching/orchestration/generateCoachingPlan.ts) — runs the pipeline (parallel reviewers, parallel writer drafts, parallel cross‑challenge), assembles `planMarkdown`, returns `{ plan, planMarkdown, agentOutputs }`. Exports `COACHING_AGENT_TIMELINE` and re‑exports `PLAN_DURATION_WEEKS` / `DEFAULT_PLAN_DURATION_WEEKS`.
 - [buildTextFallback.ts](../lib/coaching/orchestration/buildTextFallback.ts) — deterministic plan when AI is unavailable.
 
 ### `lib/coaching/ai/` — provider adapters + routing (§8)
