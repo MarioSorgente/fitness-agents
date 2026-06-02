@@ -17,7 +17,9 @@ import { buildCoachingTextFallback } from "@/lib/coaching/orchestration/buildTex
 import {
   COACHING_AGENT_TIMELINE,
   type CoachingProgressEvent,
+  DEFAULT_PLAN_DURATION_WEEKS,
   generateCoachingPlan,
+  PLAN_DURATION_WEEKS,
 } from "@/lib/coaching/orchestration/generateCoachingPlan";
 import type { CoachingPlanContent } from "@/lib/coaching/schemas/coachingPlanSchema";
 import { coachingIntakeSchema } from "@/lib/coaching/schemas/intakeSchema";
@@ -34,6 +36,14 @@ const generatePlanSchema = z
     // that fails on Vercel's per-invocation local storage.
     intakePayload: coachingIntakeSchema.optional(),
     orchestrationMode: z.enum(["test", "production"]).default("test"),
+    // Program length to generate. Drives the phased structure in the plan writers.
+    planDurationWeeks: z.coerce
+      .number()
+      .int()
+      .refine((weeks) => PLAN_DURATION_WEEKS.includes(weeks as (typeof PLAN_DURATION_WEEKS)[number]), {
+        message: `planDurationWeeks must be one of: ${PLAN_DURATION_WEEKS.join(", ")}.`,
+      })
+      .default(DEFAULT_PLAN_DURATION_WEEKS),
   })
   .refine((value) => Boolean(value.intakePayload || value.intakeSubmissionId), {
     message: "Either intakePayload or intakeSubmissionId must be provided.",
@@ -143,6 +153,7 @@ export async function POST(request: Request) {
           const generated = await generateCoachingPlan({
             intakePayload,
             mode: input.orchestrationMode,
+            planDurationWeeks: input.planDurationWeeks,
             onProgress: (event) => send(event),
           });
 

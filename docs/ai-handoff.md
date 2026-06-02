@@ -173,8 +173,10 @@ client data.
 
 ## Cheap test-mode AI routing
 
-`orchestrationMode: "test"` routes every step, including `final_moderator`, through the cheapest fast
-route order: Kimi fast first when `KIMI_API_KEY` or `MOONSHOT_API_KEY` is configured, then OpenAI fast,
-then Anthropic fast. The default OpenAI fast model is `gpt-4.1-nano` unless `OPENAI_MODEL_FAST` is set.
-Production mode still uses fast routes for expert-panel work and the configured premium/main route for
-final synthesis.
+`orchestrationMode: "test"` (the admin "Draft" quality option) routes the panel steps through the
+cheapest fast route order: Kimi fast first when `KIMI_API_KEY` or `MOONSHOT_API_KEY` is configured, then
+OpenAI fast, then Anthropic fast. The default OpenAI fast model is `gpt-4.1-nano` unless
+`OPENAI_MODEL_FAST` is set. The two plan writers (`training_plan_writer`, `nutrition_plan_writer`) stay on
+the fast tier in test mode but reorder to Anthropic → OpenAI → Kimi so a long plan is not truncated by
+Kimi's 8k context. Production mode (the admin "Final" quality option) keeps fast routes for expert-panel
+work and uses the configured premium/main route for the two writers.

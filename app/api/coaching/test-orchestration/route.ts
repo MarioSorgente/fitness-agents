@@ -84,14 +84,18 @@ export async function POST(request: Request) {
     const intakeCompression = generated.agentOutputs.intakeCompression as
       | { provider?: string; model?: string }
       | undefined;
-    const finalModerator = generated.agentOutputs.finalModerator as
+    const trainingPlanWriter = generated.agentOutputs.trainingPlanWriter as
+      | { provider?: string; model?: string }
+      | undefined;
+    const nutritionPlanWriter = generated.agentOutputs.nutritionPlanWriter as
       | { provider?: string; model?: string }
       | undefined;
     const completedSteps = [
       intakeCompression ? "intake_compression" : undefined,
       ...(generated.agentOutputs.expertOutputs ?? []).map((output) => output.step),
       generated.agentOutputs.panelBrief ? "panel_brief" : undefined,
-      finalModerator ? "final_moderator" : undefined,
+      trainingPlanWriter ? "training_plan_writer" : undefined,
+      nutritionPlanWriter ? "nutrition_plan_writer" : undefined,
     ].filter((step): step is string => Boolean(step));
 
     const providerModelsUsed = {
@@ -106,7 +110,12 @@ export async function POST(request: Request) {
         provider: output.provider,
         model: output.model,
       })),
-      finalModerator: generated.plan.finalModerator,
+      trainingPlanWriter: trainingPlanWriter
+        ? { provider: trainingPlanWriter.provider, model: trainingPlanWriter.model }
+        : undefined,
+      nutritionPlanWriter: nutritionPlanWriter
+        ? { provider: nutritionPlanWriter.provider, model: nutritionPlanWriter.model }
+        : undefined,
     };
 
     return NextResponse.json({
@@ -121,7 +130,7 @@ export async function POST(request: Request) {
         finalPlan: "passed",
       },
       finalPlanKeys: Object.keys(finalContent),
-      finalModerator: generated.plan.finalModerator,
+      planLengthChars: generated.planMarkdown.length,
     });
   } catch (error) {
     if (error instanceof Error && error.message.startsWith("No AI route succeeded")) {

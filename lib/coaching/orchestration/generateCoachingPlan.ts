@@ -22,43 +22,27 @@ import {
   type CoachingPlanContent,
 } from "../schemas/coachingPlanSchema";
 import type { CoachingIntake, JsonObject, JsonValue } from "../schemas/intakeSchema";
+// All agent prompt text lives under ../prompts (one file per agent). This file only sequences
+// the steps; edit wording there, not here.
+import {
+  buildExpertSystemPrompt,
+  buildExpertUserPrompt,
+  buildIntakeCompressionUserPrompt,
+  buildNutritionPlanWriterSystemPrompt,
+  buildTrainingPlanWriterSystemPrompt,
+  describePlanDuration,
+  EXPERT_STEPS,
+  intakeCompressionSystemPrompt,
+  panelBriefSystemPrompt,
+} from "../prompts";
 
-const EXPERT_STEPS: Array<{
-  id: CoachingStepId;
-  title: string;
-  instruction: string;
-}> = [
-  {
-    id: "medical_safety_screener",
-    title: "Medical safety screener",
-    instruction:
-      "Identify medical red flags, contraindications, information that requires clinician clearance, and safe coaching boundaries. Do not diagnose.",
-  },
-  {
-    id: "physio_reviewer",
-    title: "Physio reviewer",
-    instruction:
-      "Review movement limitations, pain considerations, regressions, progressions, and referral triggers from a conservative rehab-aware coaching lens.",
-  },
-  {
-    id: "fitness_coach",
-    title: "Fitness coach",
-    instruction:
-      "Design the training direction: weekly structure, strength and conditioning priorities, progression logic, and measurable milestones.",
-  },
-  {
-    id: "mobility_coach",
-    title: "Mobility coach",
-    instruction:
-      "Recommend mobility, warm-up, cooldown, recovery, and movement-prep priorities that support the plan and the stated limitations.",
-  },
-  {
-    id: "nutrition_reviewer",
-    title: "Nutrition reviewer",
-    instruction:
-      "Review nutrition and habit considerations that support the goal without prescribing medical nutrition therapy or unsafe restriction.",
-  },
-];
+// Re-export the plan-duration config so existing importers (e.g. the generate-plan route) keep
+// working after the prompt text moved to ../prompts/shared/planDuration.
+export {
+  PLAN_DURATION_WEEKS,
+  DEFAULT_PLAN_DURATION_WEEKS,
+  type PlanDurationWeeks,
+} from "../prompts";
 
 export type CoachingProgressEvent =
   | { kind: "step_started"; step: CoachingStepId; title: string }
@@ -81,6 +65,8 @@ export type CoachingProgressEvent =
 export type GenerateCoachingPlanInput = {
   intakePayload: CoachingIntake;
   mode: CoachingOrchestrationMode;
+  // How long a program to write (1, 4, 12, or 24 weeks). Drives the phased structure.
+  planDurationWeeks?: number;
   providers?: CoachingAiProviderRegistry;
   onProgress?: (event: CoachingProgressEvent) => void;
 };
@@ -100,7 +86,8 @@ export const COACHING_AGENT_TIMELINE: ReadonlyArray<{ step: CoachingStepId; titl
   { step: "mobility_coach", title: "Mobility coach" },
   { step: "nutrition_reviewer", title: "Nutrition reviewer" },
   { step: "panel_brief", title: "Panel brief" },
-  { step: "final_moderator", title: "Final moderator" },
+  { step: "training_plan_writer", title: "Training plan writer" },
+  { step: "nutrition_plan_writer", title: "Nutrition plan writer" },
 ];
 
 type StepRun = {
@@ -208,7 +195,7 @@ function routingMetadata(mode: CoachingOrchestrationMode): JsonObject {
       "panel_brief",
     ],
     cheapAndHeavyRoutes: getRoutesForStep("fitness_coach", mode).map((route) => ({ ...route })),
-    finalModeratorRoutes: getRoutesForStep("final_moderator", mode).map((route) => ({ ...route })),
+    finalWriterRoutes: getRoutesForStep("training_plan_writer", mode).map((route) => ({ ...route })),
   };
 }
 
@@ -248,9 +235,12 @@ async function runStep(
 export async function generateCoachingPlan({
   intakePayload,
   mode,
+  planDurationWeeks,
   providers = createDefaultProviderRegistry(),
   onProgress,
 }: GenerateCoachingPlanInput): Promise<GenerateCoachingPlanResult> {
+  const planDuration = describePlanDuration(planDurationWeeks);
+
   const intakeCompression = completionToStepRun(
     "intake_compression",
     "Intake compression",
@@ -265,14 +255,11 @@ export async function generateCoachingPlan({
         messages: [
           {
             role: "system",
-            content:
-              "You compress coaching intakes into a privacy-minimized structured brief. Preserve safety-relevant facts, goals, constraints, equipment, schedule, and missing information. Do not invent details. Return a single valid JSON object only with no markdown or commentary.",
+            content: intakeCompressionSystemPrompt,
           },
           {
             role: "user",
-            content: `Compress this raw intake into JSON with keys: clientProfile, goals, schedule, equipment, constraints, safetySignals, nutritionSignals, missingInformation, coachSummary. Raw intake:\n${JSON.stringify(
-              intakePayload,
-            )}`,
+            content: buildIntakeCompressionUserPrompt(intakePayload),
           },
         ],
       },
@@ -295,15 +282,15 @@ export async function generateCoachingPlan({
       mode,
       {
         temperature: 0.2,
-        maxTokens: 1500,
+        maxTokens: 2200,
         messages: [
           {
             role: "system",
-            content: `You are the ${expert.title} in a coaching plan panel. ${expert.instruction} Return one strict JSON object only with keys: findings, recommendations, risks, followUps. Do not wrap the JSON in markdown.`,
+            content: buildExpertSystemPrompt(expert.title, expert.instruction),
           },
           {
             role: "user",
-            content: `Use only this compressed intake brief. Do not request or rely on the full raw intake.\n${compressedIntakeText}`,
+            content: buildExpertUserPrompt(compressedIntakeText),
           },
         ],
       },
@@ -325,12 +312,11 @@ export async function generateCoachingPlan({
       mode,
       {
         temperature: 0.1,
-        maxTokens: 2000,
+        maxTokens: 2500,
         messages: [
           {
             role: "system",
-            content:
-              "You merge expert panel notes into a concise moderator brief. Highlight agreements, conflicts, safety gates, and the safest actionable plan direction. Return one strict JSON object only with no markdown or commentary.",
+            content: panelBriefSystemPrompt,
           },
           {
             role: "user",
@@ -347,60 +333,96 @@ export async function generateCoachingPlan({
 
   const panelBriefOutput = stepRunToPanelBrief(panelBrief, expertOutputs);
 
-  const finalModerator = completionToStepRun(
-    "final_moderator",
-    "Final moderator",
+  // Shared context for both writers. They receive the panel brief and the chosen duration so
+  // they prescribe a complete, phased program rather than a vague outline.
+  const writerUserMessage = JSON.stringify({
+    compressedIntake,
+    panelBrief: panelBriefOutput,
+    planDuration: { weeks: planDuration.weeks, label: planDuration.label },
+  });
+
+  const trainingPlanWriter = completionToStepRun(
+    "training_plan_writer",
+    "Training plan writer",
     await runStep(
       providers,
-      "final_moderator",
-      "Final moderator",
+      "training_plan_writer",
+      "Training plan writer",
       mode,
       {
-        temperature: 0.2,
-        maxTokens: 3500,
+        temperature: 0.3,
+        maxTokens: planDuration.trainingMaxTokens,
         messages: [
           {
             role: "system",
-            content: [
-              "You are the final coaching plan moderator. Using the compressed intake and the panel",
-              "brief, write a clear, encouraging, review-ready coaching plan in GitHub-flavored Markdown.",
-              "",
-              "Use exactly these `###` sections, in order:",
-              "### Plan snapshot — 2–4 sentences tying the approach to the client's goal and constraints.",
-              "### Weekly training schedule — a Markdown table with columns | Day | Focus | Key sessions |, one row per training day based on their availability.",
-              "### Session blueprint — a bullet list: warm-up, main work, accessories, conditioning, cooldown.",
-              "### Progression — how to progress over the next 4–8 weeks.",
-              "### Mobility & recovery — a short bullet list.",
-              "### Nutrition starting points — a short bullet list; respect stated restrictions; no medical nutrition therapy.",
-              "### Safety notes — a Markdown blockquote (lines starting with >) covering any clearance/caution guidance and a reminder this is not medical advice.",
-              "",
-              "Rules: Use only the information provided — never invent medical facts. Use **bold** for key terms.",
-              "Do NOT output a top-level title, a 'Part 2' header, JSON, or code fences around the document.",
-              "Start directly with `### Plan snapshot`.",
-            ].join("\n"),
+            content: buildTrainingPlanWriterSystemPrompt(planDuration),
           },
           {
             role: "user",
-            content: JSON.stringify({
-              compressedIntake,
-              panelBrief: panelBriefOutput,
-            }),
+            content: writerUserMessage,
           },
         ],
       },
       onProgress,
     ),
   );
-  const planMarkdown = finalModerator.content.trim();
+
+  const nutritionPlanWriter = completionToStepRun(
+    "nutrition_plan_writer",
+    "Nutrition plan writer",
+    await runStep(
+      providers,
+      "nutrition_plan_writer",
+      "Nutrition plan writer",
+      mode,
+      {
+        temperature: 0.3,
+        maxTokens: 5500,
+        messages: [
+          {
+            role: "system",
+            content: buildNutritionPlanWriterSystemPrompt(planDuration),
+          },
+          {
+            role: "user",
+            content: writerUserMessage,
+          },
+        ],
+      },
+      onProgress,
+    ),
+  );
+
+  // Assemble the two halves into the single Part 2 plan body (intake summary + disclaimer are
+  // added by assemblePlanDocument upstream). Both halves use `###` sections so they read as one
+  // consistent document; a rule separates training from nutrition.
+  const planMarkdown = [
+    trainingPlanWriter.content.trim(),
+    "",
+    "---",
+    "",
+    nutritionPlanWriter.content.trim(),
+  ].join("\n");
 
   return {
     plan: coachingPlanContentSchema.parse({
       version: 1,
       orchestrationMode: mode,
       source: "api/coaching/generate-plan",
+      planDurationWeeks: planDuration.weeks,
+      // Kept for back-compat with consumers that read `finalModerator`; points at the writer
+      // that authors the lead (training) half of the document.
       finalModerator: {
-        provider: finalModerator.provider,
-        model: finalModerator.model,
+        provider: trainingPlanWriter.provider,
+        model: trainingPlanWriter.model,
+      },
+      trainingPlanWriter: {
+        provider: trainingPlanWriter.provider,
+        model: trainingPlanWriter.model,
+      },
+      nutritionPlanWriter: {
+        provider: nutritionPlanWriter.provider,
+        model: nutritionPlanWriter.model,
       },
       // The editable Markdown document is the source of truth now; `content` keeps a
       // lightweight marker so legacy structured-JSON consumers don't choke.
@@ -410,6 +432,7 @@ export async function generateCoachingPlan({
     agentOutputs: coachingAgentOutputsSchema.parse({
       status: "generated",
       routing: routingMetadata(mode),
+      planDurationWeeks: planDuration.weeks,
       intakeCompression: {
         provider: intakeCompression.provider,
         model: intakeCompression.model,
@@ -418,7 +441,8 @@ export async function generateCoachingPlan({
       compressedIntake,
       expertOutputs,
       panelBrief: panelBriefOutput,
-      finalModerator: { ...finalModerator },
+      trainingPlanWriter: { ...trainingPlanWriter },
+      nutritionPlanWriter: { ...nutritionPlanWriter },
       rawIntakeDistribution:
         "Raw intake is sent only to intake_compression; expert steps receive compressedIntake only.",
     }),

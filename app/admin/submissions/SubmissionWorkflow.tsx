@@ -20,6 +20,20 @@ type Phase = "idle" | "generating" | "ready" | "error";
 type SaveState = { status: "idle" | "saving" | "saved" | "error"; message?: string };
 type PdfState = { status: "idle" | "working" | "error"; message?: string };
 
+type QualityMode = "production" | "test";
+
+const PLAN_LENGTH_OPTIONS: Array<{ value: number; label: string }> = [
+  { value: 1, label: "1 week (sample)" },
+  { value: 4, label: "4 weeks (1 month)" },
+  { value: 12, label: "12 weeks (3 months)" },
+  { value: 24, label: "24 weeks (6 months)" },
+];
+
+const QUALITY_OPTIONS: Array<{ value: QualityMode; label: string }> = [
+  { value: "production", label: "Final (premium models)" },
+  { value: "test", label: "Draft (fast/cheap)" },
+];
+
 type SubmissionWorkflowProps = {
   submissionId: string;
   userId: string;
@@ -58,6 +72,8 @@ export function SubmissionWorkflow({
   const [agents, setAgents] = useState<AgentRow[]>([]);
   const [markdown, setMarkdown] = useState(initialMarkdown ?? "");
   const [planId, setPlanId] = useState<string | undefined>(initialPlanId);
+  const [planLength, setPlanLength] = useState<number>(12);
+  const [quality, setQuality] = useState<QualityMode>("production");
   const [genError, setGenError] = useState<string | undefined>(undefined);
   const [save, setSave] = useState<SaveState>({ status: "idle" });
   const [pdf, setPdf] = useState<PdfState>({ status: "idle" });
@@ -85,7 +101,8 @@ export function SubmissionWorkflow({
           userId,
           intakeSubmissionId: submissionId,
           intakePayload: payload,
-          orchestrationMode: "test",
+          orchestrationMode: quality,
+          planDurationWeeks: planLength,
         }),
         signal: controller.signal,
       });
@@ -247,6 +264,39 @@ export function SubmissionWorkflow({
     triggerDownload(blob, `coaching-document-${planId ?? submissionId}.md`);
   }
 
+  const generationControls = (
+    <div className="generation-controls" style={{ display: "flex", flexWrap: "wrap", gap: "1rem" }}>
+      <label style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+        Plan length
+        <select
+          value={planLength}
+          onChange={(event) => setPlanLength(Number(event.target.value))}
+          disabled={phase === "generating"}
+        >
+          {PLAN_LENGTH_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+        Quality
+        <select
+          value={quality}
+          onChange={(event) => setQuality(event.target.value as QualityMode)}
+          disabled={phase === "generating"}
+        >
+          {QUALITY_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </label>
+    </div>
+  );
+
   return (
     <section className="card stack">
       <div className="section-heading">
@@ -258,8 +308,10 @@ export function SubmissionWorkflow({
         <>
           <p className="muted-copy">
             Run the coaching agents on this intake to draft an editable Markdown document (client
-            summary + plan). You can edit it before exporting a PDF.
+            summary + plan). Choose a program length and quality, then generate. You can edit it
+            before exporting a PDF.
           </p>
+          {generationControls}
           <div className="button-row">
             <button type="button" onClick={generate}>
               Generate draft
@@ -307,6 +359,7 @@ export function SubmissionWorkflow({
       {phase === "ready" ? (
         <>
           {genError ? <p className="error-text">{genError}</p> : null}
+          {generationControls}
           <div className="md-toolbar">
             <button type="button" onClick={handleSave} disabled={save.status === "saving"}>
               {save.status === "saving" ? "Saving…" : "Save changes"}
