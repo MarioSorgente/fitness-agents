@@ -1,6 +1,7 @@
 import { createRequire } from "node:module";
 
 import type { App } from "firebase-admin/app";
+import type { Auth } from "firebase-admin/auth";
 import type { Firestore } from "firebase-admin/firestore";
 
 import { FirebaseConfigError } from "../api/routeUtils";
@@ -17,6 +18,7 @@ const REMEDIATION_HINT =
 const nodeRequire = createRequire(import.meta.url);
 
 let firestore: Firestore | undefined;
+let auth: Auth | undefined;
 
 function fromServiceAccountJson(): FirebaseServiceAccount | undefined {
   const rawServiceAccount = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
@@ -117,4 +119,15 @@ export function getFirebaseFirestore(): Firestore {
   firestore = getFirestore(getFirebaseAdminApp());
 
   return firestore;
+}
+
+export function getFirebaseAuth(): Auth {
+  if (auth) {
+    return auth;
+  }
+
+  const { getAuth } = nodeRequire("firebase-admin/auth") as typeof import("firebase-admin/auth");
+  auth = getAuth(getFirebaseAdminApp());
+
+  return auth;
 }

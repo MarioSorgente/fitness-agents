@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { requireAdminPage } from "@/lib/coaching/auth/adminAuth";
 import { createCoachingRepository } from "@/lib/coaching/db/coachingRepositoryFactory";
 import type { IntakeSubmission } from "@/lib/coaching/db/coachingRepository";
 import type { CompactClientProfile } from "@/lib/coaching/schemas/intakeSchema";
@@ -64,6 +65,7 @@ async function loadDetail(id: string): Promise<{
 
 export default async function AdminSubmissionDetailPage({ params }: SubmissionDetailPageProps) {
   const { id } = await params;
+  await requireAdminPage(`/admin/submissions/${id}`);
   const { submission, initialPlanId, initialMarkdown, error } = await loadDetail(id);
 
   if (error) {

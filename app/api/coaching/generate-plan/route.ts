@@ -5,10 +5,12 @@ import { randomUUID } from "node:crypto";
 import {
   documentIdSchema,
   errorResponse,
+  handleRouteError,
   parseJsonBody,
   requireOwnedResource,
   userIdSchema,
 } from "@/lib/coaching/api/routeUtils";
+import { requireAdminApi } from "@/lib/coaching/auth/adminAuth";
 import { createCoachingRepository } from "@/lib/coaching/db/coachingRepositoryFactory";
 import { assemblePlanDocument } from "@/lib/coaching/markdown/buildPlanDocument";
 import { buildCoachingTextFallback } from "@/lib/coaching/orchestration/buildTextFallback";
@@ -68,6 +70,13 @@ function sseLine(event: StreamEvent): string {
 }
 
 export async function POST(request: Request) {
+  // Generation is admin-only — it runs paid agents and returns client PII.
+  try {
+    await requireAdminApi();
+  } catch (error) {
+    return handleRouteError(error);
+  }
+
   // Parse and validate up-front so client gets a normal JSON 4xx for bad input.
   let input: z.infer<typeof generatePlanSchema>;
   try {

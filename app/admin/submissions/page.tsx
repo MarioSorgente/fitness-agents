@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { requireAdminPage } from "@/lib/coaching/auth/adminAuth";
 import { createCoachingRepository } from "@/lib/coaching/db/coachingRepositoryFactory";
 import type { IntakeSubmission } from "@/lib/coaching/db/coachingRepository";
 
@@ -46,6 +47,7 @@ async function loadSubmissions(): Promise<{ submissions: IntakeSubmission[]; err
 }
 
 export default async function AdminSubmissionsPage() {
+  await requireAdminPage("/admin/submissions");
   const { submissions, error } = await loadSubmissions();
 
   return (

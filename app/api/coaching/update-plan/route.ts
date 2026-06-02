@@ -16,6 +16,7 @@ import {
   coachingRecordStatusSchema,
   reviewStatusSchema,
 } from "@/lib/coaching/schemas/coachingPlanSchema";
+import { requireAdminApi } from "@/lib/coaching/auth/adminAuth";
 import { createCoachingRepository } from "@/lib/coaching/db/coachingRepositoryFactory";
 
 export const runtime = "nodejs";
@@ -52,6 +53,7 @@ const updatePlanSchema = z
 
 export async function POST(request: Request) {
   try {
+    await requireAdminApi();
     const input = updatePlanSchema.parse(await parseJsonBody(request));
     const repository = createCoachingRepository();
     const existingPlan = requireOwnedResource(
