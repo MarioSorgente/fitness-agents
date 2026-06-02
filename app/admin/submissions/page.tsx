@@ -4,6 +4,8 @@ import { requireAdminPage } from "@/lib/coaching/auth/adminAuth";
 import { createCoachingRepository } from "@/lib/coaching/db/coachingRepositoryFactory";
 import type { IntakeSubmission } from "@/lib/coaching/db/coachingRepository";
 
+import { seedTestSubmission } from "./actions";
+
 export const dynamic = "force-dynamic";
 
 function humanize(value: unknown): string {
@@ -72,6 +74,17 @@ export default async function AdminSubmissionsPage() {
           <h2>Submissions</h2>
           <span>
             {submissions.length} {submissions.length === 1 ? "record" : "records"}
+          </span>
+        </div>
+
+        <div className="button-row">
+          <form action={seedTestSubmission}>
+            <button type="submit" className="secondary-button">
+              Create test client (dummy data)
+            </button>
+          </form>
+          <span className="muted-copy">
+            Seeds a sample intake and opens it, so you can run the full generate → edit → PDF flow.
           </span>
         </div>
 

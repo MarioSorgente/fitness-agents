@@ -43,10 +43,13 @@ export function AdminLoginForm() {
 
       if (!response.ok) {
         const body = (await response.json().catch(() => null)) as {
-          error?: { message?: string };
+          error?: { message?: string; details?: { name?: string; message?: string } };
         } | null;
+        const detail = body?.error?.details?.message
+          ? ` — ${body.error.details.message}`
+          : "";
         setStatus("error");
-        setMessage(body?.error?.message ?? "Sign-in was rejected.");
+        setMessage(`${body?.error?.message ?? "Sign-in was rejected."}${detail}`);
         // Drop the client session so a different account can be tried.
         await auth.signOut().catch(() => {});
         return;
