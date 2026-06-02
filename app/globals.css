@@ -540,6 +540,24 @@ button:disabled {
   color: var(--foreground);
 }
 
+/* Admin header bar */
+.admin-bar {
+  align-items: center;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  margin: 0 auto 1.5rem;
+  max-width: 1120px;
+  padding: 0.6rem 1.25rem;
+}
+
+.admin-bar .text-button {
+  font-weight: 700;
+}
+
 /* Standalone public intake + confirmation */
 .standalone-shell {
   max-width: 960px;

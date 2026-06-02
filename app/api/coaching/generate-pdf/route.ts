@@ -5,6 +5,7 @@ import {
   handleRouteError,
   parseJsonBody,
 } from "@/lib/coaching/api/routeUtils";
+import { requireAdminApi } from "@/lib/coaching/auth/adminAuth";
 import { createCoachingRepository } from "@/lib/coaching/db/coachingRepositoryFactory";
 import { markdownPdfFilename, renderMarkdownPdf } from "@/lib/coaching/pdf/renderMarkdownPdf";
 import { coachingPlanPdfFilename, renderCoachingPlanPdf } from "@/lib/coaching/pdf/renderPdf";
@@ -30,6 +31,7 @@ function pdfResponse(buffer: Buffer, filename: string) {
 
 export async function POST(request: Request) {
   try {
+    await requireAdminApi();
     const input = pdfGenerationRequestSchema.parse(await parseJsonBody(request));
 
     // Primary path: render the (edited) Markdown document directly.
