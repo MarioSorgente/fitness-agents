@@ -118,6 +118,14 @@ export function getFirebaseFirestore(): Firestore {
   ) as typeof import("firebase-admin/firestore");
   firestore = getFirestore(getFirebaseAdminApp());
 
+  // Intake payloads contain optional fields that parse to `undefined`; Firestore
+  // rejects `undefined` values unless we opt to ignore them (local JSON drops them).
+  try {
+    firestore.settings({ ignoreUndefinedProperties: true });
+  } catch {
+    // settings() throws if Firestore was already used; safe to ignore on re-entry.
+  }
+
   return firestore;
 }
 
