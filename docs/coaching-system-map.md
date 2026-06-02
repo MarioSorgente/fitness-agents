@@ -54,16 +54,17 @@ If goal-specific branching is needed, add explicit logic in `lib/coaching/orches
 
 AI routing lives in `lib/coaching/ai/provider.ts`.
 
-`AI_PROVIDER` is a premium synthesis preference, not a global provider lock. In production mode, cheaper/high-volume work stays on fast models first, then the final moderator uses the preferred main-model tier first.
+`AI_PROVIDER` is a premium synthesis preference, not a global provider lock. In production mode, cheaper/high-volume work stays on fast models first, then the two plan writers (`training_plan_writer`, `nutrition_plan_writer`) use the preferred main-model tier first.
 
-- `AI_PROVIDER=anthropic` means the final moderator prefers Anthropic Opus first.
+- `AI_PROVIDER=anthropic` means the plan writers prefer Anthropic Opus first.
 - Cheap and high-volume steps (`intake_compression`, expert reviewers, and `panel_brief`) try Kimi fast, then OpenAI fast, then Anthropic fast.
-- The final moderator fallback order is the preferred `AI_PROVIDER` first, then the remaining main providers in the default order Anthropic, OpenAI, Kimi.
+- The plan writers' production fallback order is the preferred `AI_PROVIDER` first, then the remaining main providers in the default order Anthropic, OpenAI, Kimi.
+- In `test` (Draft) mode the writers stay on the fast tier but use the Anthropic → OpenAI → Kimi order, because Kimi's 8k context truncates a long plan.
 
 | Task tier                | Steps                                             | Production fallback order                                                                        |
 | ------------------------ | ------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
 | Fast / cheap panel       | Intake compression, expert reviewers, panel brief | Kimi fast → OpenAI fast → Anthropic fast                                                         |
-| Main / premium synthesis | Final moderator                                   | Preferred `AI_PROVIDER` main model → remaining main providers in Anthropic → OpenAI → Kimi order |
+| Main / premium synthesis | Training plan writer, nutrition plan writer       | Preferred `AI_PROVIDER` main model → remaining main providers in Anthropic → OpenAI → Kimi order |
 
 Model names can be overridden with `KIMI_MODEL_FAST`, `OPENAI_MODEL_FAST`, `ANTHROPIC_MODEL_FAST`, `ANTHROPIC_MODEL_MAIN`, `OPENAI_MODEL_MAIN`, and `KIMI_MODEL_MAIN` without changing tier-level fallback order.
 
@@ -84,8 +85,9 @@ Current flow:
 3. Expert reviewers run in sequence: medical safety screener, physio reviewer, fitness coach, mobility coach, and nutrition reviewer.
 4. Expert outputs are normalized into `expertOutputSchema`.
 5. `panel_brief` merges agreements, conflicts, safety gates, and plan direction.
-6. `final_moderator` creates the review-ready coaching plan JSON.
-7. The result is validated against `coachingPlanContentSchema` and `coachingAgentOutputsSchema`.
+6. `training_plan_writer` writes the training half of the plan as Markdown (named split, day-by-day exercise tables, phased progression) for the chosen `planDurationWeeks` (1, 4, 12, or 24).
+7. `nutrition_plan_writer` writes the nutrition half as Markdown (daily targets, a Monday–Friday meal table, alternative approaches such as intermittent fasting, and per-phase calorie adjustments).
+8. The two halves are concatenated into the plan Markdown and validated against `coachingPlanContentSchema` and `coachingAgentOutputsSchema`.
 
 API orchestration starts in `app/api/coaching/generate-plan/route.ts`, which loads an owned intake submission, runs `generateCoachingPlan`, stores the plan, and creates an `in_review` review state.
 

@@ -12,7 +12,8 @@ export type CoachingStepId =
   | "mobility_coach"
   | "nutrition_reviewer"
   | "panel_brief"
-  | "final_moderator";
+  | "training_plan_writer"
+  | "nutrition_plan_writer";
 
 export type CoachingStepRoute = {
   provider: CoachingAiProviderId;
@@ -55,7 +56,16 @@ export const CHEAP_OR_HEAVY_STEPS: readonly CoachingStepId[] = [
   "panel_brief",
 ] as const;
 
-export const FINAL_MODERATOR_STEP: CoachingStepId = "final_moderator";
+// The two premium "writer" steps that author the final client-facing plan. They use the
+// `main` model tier in production and need a long output budget.
+export const FINAL_WRITER_STEPS: readonly CoachingStepId[] = [
+  "training_plan_writer",
+  "nutrition_plan_writer",
+] as const;
+
+function isFinalWriterStep(step: CoachingStepId): boolean {
+  return FINAL_WRITER_STEPS.includes(step);
+}
 
 const DEFAULT_MODELS: Record<CoachingAiProviderId, Record<CoachingModelTier, string>> = {
   anthropic: {
@@ -143,6 +153,13 @@ export function getTestRoute(): CoachingStepRoute[] {
   return CHEAP_STEP_PROVIDER_ORDER.map((provider) => routeFor(provider, "fast"));
 }
 
+// Draft/test route for the plan WRITERS. Still cheap (fast tier) but ordered to prefer
+// providers that can emit a long document — Kimi's 8k context truncates a full plan, so it
+// is the last resort here rather than the first as in the generic cheap route.
+export function getWriterTestRoute(): CoachingStepRoute[] {
+  return getPremiumSynthesisProviderOrder().map((provider) => routeFor(provider, "fast"));
+}
+
 export const CHEAP_STEP_PRODUCTION_ROUTE: readonly CoachingStepRoute[] =
   getCheapStepProductionRoute();
 
@@ -156,10 +173,10 @@ export function getRoutesForStep(
   mode: CoachingOrchestrationMode,
 ): readonly CoachingStepRoute[] {
   if (mode === "test") {
-    return getTestRoute();
+    return isFinalWriterStep(step) ? getWriterTestRoute() : getTestRoute();
   }
 
-  return step === FINAL_MODERATOR_STEP
+  return isFinalWriterStep(step)
     ? getFinalModeratorProductionRoute()
     : getCheapStepProductionRoute();
 }
