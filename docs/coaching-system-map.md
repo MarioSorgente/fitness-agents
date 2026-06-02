@@ -36,7 +36,7 @@ The intended long-term home for prompt text is `lib/coaching/prompts/`:
 
 ## Shared safety rules
 
-Safety rules currently appear in the orchestration prompts and expert instructions in `lib/coaching/orchestration/generateCoachingPlan.ts`, especially the medical safety screener, physio reviewer, nutrition reviewer, panel brief, and final moderator instructions. When a safety rule should apply broadly, move it into a reusable module under `lib/coaching/prompts/shared/` and compose it into each relevant step.
+Prompt text lives in `lib/coaching/prompts/` (one file per agent); the orchestration in `lib/coaching/orchestration/generateCoachingPlan.ts` only sequences the steps. Safety wording appears in the medical safety screener, physio reviewer, mobility coach, panel brief, and the two plan writers. When a safety rule should apply broadly, move it into a reusable module under `lib/coaching/prompts/shared/` and compose it into each relevant step.
 
 Safety-sensitive data fields are validated by `lib/coaching/schemas/intakeSchema.ts` through `limitations`, `clientProfile.constraints`, and `clientProfile.safetySignals`. Final plan and agent-output storage contracts live in `lib/coaching/schemas/coachingPlanSchema.ts`.
 
@@ -44,9 +44,9 @@ Safety-sensitive data fields are validated by `lib/coaching/schemas/intakeSchema
 
 Goal inputs are gathered in `app/coaching/intake/CoachingIntakeForm.tsx` and validated by `coachingIntakeSchema` in `lib/coaching/schemas/intakeSchema.ts`. The orchestration does not yet have a separate goal-router module; goal interpretation is handled by:
 
-- intake compression in `lib/coaching/orchestration/generateCoachingPlan.ts`, which preserves goals, constraints, schedule, equipment, and missing information;
-- expert reviewers in the same file, especially the fitness coach and mobility coach;
-- the final moderator, which synthesizes the structured plan.
+- intake compression, which preserves goals, constraints, schedule, equipment, and missing information;
+- the panel reviewers (medical safety screener, physio reviewer, mobility coach);
+- the training and nutrition plan writers, which each design and write their half of the plan.
 
 If goal-specific branching is needed, add explicit logic in `lib/coaching/orchestration/` and keep any new goal types or output fields reflected in `lib/coaching/schemas/`.
 
@@ -81,13 +81,13 @@ The main orchestration entry point is `generateCoachingPlan` in `lib/coaching/or
 Current flow:
 
 1. Raw intake is sent only to `intake_compression`.
-2. The compressed intake is parsed and used as the privacy-minimized source for expert reviewers.
-3. Expert reviewers run in sequence: medical safety screener, physio reviewer, fitness coach, mobility coach, and nutrition reviewer.
-4. Expert outputs are normalized into `expertOutputSchema`.
+2. The compressed intake is parsed and used as the privacy-minimized source for the panel reviewers.
+3. Panel reviewers run **in parallel**: medical safety screener, physio reviewer, and mobility coach.
+4. Reviewer outputs are normalized into `expertOutputSchema`.
 5. `panel_brief` merges agreements, conflicts, safety gates, and plan direction.
-6. `training_plan_writer` writes the training half of the plan as Markdown (named split, day-by-day exercise tables, phased progression) for the chosen `planDurationWeeks` (1, 4, 12, or 24).
-7. `nutrition_plan_writer` writes the nutrition half as Markdown (daily targets, a Monday–Friday meal table, alternative approaches such as intermittent fasting, and per-phase calorie adjustments).
-8. The two halves are concatenated into the plan Markdown and validated against `coachingPlanContentSchema` and `coachingAgentOutputsSchema`.
+6. The two domain writers **draft in parallel** for the chosen `planDurationWeeks` (1/4/12/24): `training_plan_writer` (named split, day-by-day exercise tables, phased progression) and `nutrition_plan_writer` (daily targets, Monday–Friday meal table, alternatives, per-phase adjustments).
+7. **Cross-challenge round** (in parallel): `training_plan_challenge` reads the nutrition draft and revises training; `nutrition_plan_challenge` reads the training draft and revises nutrition — so the combined plan is mutually consistent (fueling, recovery, volume, timing).
+8. The two revised halves are concatenated into the plan Markdown and validated against `coachingPlanContentSchema` and `coachingAgentOutputsSchema`. Round-1 drafts are retained in `agentOutputs` as the audit trail.
 
 API orchestration starts in `app/api/coaching/generate-plan/route.ts`, which loads an owned intake submission, runs `generateCoachingPlan`, stores the plan, and creates an `in_review` review state.
 

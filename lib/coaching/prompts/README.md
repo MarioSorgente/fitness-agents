@@ -13,17 +13,25 @@ Pipeline order, and the file to edit:
 | 1 | `intake_compression`    | `agents/intakeCompression.ts`         |
 | 2 | `medical_safety_screener` | `agents/medicalSafetyScreener.ts`   |
 | 3 | `physio_reviewer`       | `agents/physioReviewer.ts`            |
-| 4 | `fitness_coach`         | `agents/fitnessCoach.ts`              |
-| 5 | `mobility_coach`        | `agents/mobilityCoach.ts`             |
-| 6 | `nutrition_reviewer`    | `agents/nutritionReviewer.ts`         |
-| 7 | `panel_brief`           | `agents/panelBrief.ts`                |
-| 8 | `training_plan_writer`  | `agents/trainingPlanWriter.ts`        |
-| 9 | `nutrition_plan_writer` | `agents/nutritionPlanWriter.ts`       |
+| 4 | `mobility_coach`        | `agents/mobilityCoach.ts`             |
+| 5 | `panel_brief`           | `agents/panelBrief.ts`                |
+| 6 | `training_plan_writer`  | `agents/trainingPlanWriter.ts`        |
+| 7 | `nutrition_plan_writer` | `agents/nutritionPlanWriter.ts`       |
+
+> **Async + challenge.** The reviewers (2–4) run in parallel. The two writers then run in two
+> parallel waves: a **draft** (independent), then a **cross-review** where each reads the other's
+> draft, challenges it, and revises its own half for one coherent plan. Each writer file therefore
+> exports two prompts — `buildXxxWriterSystemPrompt` (draft) and `buildXxxChallengePrompt`
+> (cross-review). The challenge step ids are `training_plan_challenge` / `nutrition_plan_challenge`.
+>
+> The training writer does its own fitness design and the nutrition writer its own nutrition
+> analysis — the former `fitness_coach` and `nutrition_reviewer` reviewer steps were merged into
+> them, so there is no separate analyst per domain. `mobility_coach` stays a separate reviewer.
 
 Shared fragments reused across agents:
 
-- `shared/expertSystemTemplate.ts` — the role wrapper + JSON output contract shared by steps 2–6,
-  and the user message that hands them the compressed intake.
+- `shared/expertSystemTemplate.ts` — the role wrapper + JSON output contract shared by the panel
+  reviewers (steps 2–4), and the user message that hands them the compressed intake.
 - `shared/planDuration.ts` — the phase/progression wording for 1 / 4 / 12 / 24-week plans
   (injected into the training writer) plus the per-length output-token budget.
 
