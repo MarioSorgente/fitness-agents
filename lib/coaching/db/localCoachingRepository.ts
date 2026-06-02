@@ -194,6 +194,13 @@ export class LocalFileCoachingRepository implements CoachingRepository {
     return limitResults(sortByCreatedAtDesc(submissions), options.limit);
   }
 
+  async listAllIntakeSubmissions(limit?: number): Promise<IntakeSubmission[]> {
+    const store = await this.loadStore();
+    const submissions = Object.values(store.intakeSubmissions).map(hydrateIntakeSubmission);
+
+    return limitResults(sortByCreatedAtDesc(submissions), limit);
+  }
+
   async updateIntakeSubmission(
     id: string,
     updates: Parameters<CoachingRepository["updateIntakeSubmission"]>[1],

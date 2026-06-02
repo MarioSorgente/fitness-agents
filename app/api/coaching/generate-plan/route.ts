@@ -10,6 +10,7 @@ import {
   userIdSchema,
 } from "@/lib/coaching/api/routeUtils";
 import { createCoachingRepository } from "@/lib/coaching/db/coachingRepositoryFactory";
+import { assemblePlanDocument } from "@/lib/coaching/markdown/buildPlanDocument";
 import { buildCoachingTextFallback } from "@/lib/coaching/orchestration/buildTextFallback";
 import {
   COACHING_AGENT_TIMELINE,
@@ -48,6 +49,8 @@ type StreamEvent =
       // Full plan content streamed inline so the client can render the PDF without
       // a second server round-trip — critical when storage is ephemeral (Vercel local mode).
       plan: CoachingPlanContent;
+      // Combined editable document (intake summary + coaching plan) as Markdown.
+      markdown: string;
       userId: string;
       intakeSubmissionId: string;
     }
@@ -134,8 +137,15 @@ export async function POST(request: Request) {
             onProgress: (event) => send(event),
           });
 
+          // Combine the deterministic intake summary with the AI-authored plan into the
+          // single editable Markdown document the admin reviews and exports to PDF.
+          const markdown = assemblePlanDocument(intakePayload, generated.planMarkdown, {
+            generatedAt,
+          });
+
           const planContent: CoachingPlanContent = {
             ...generated.plan,
+            markdown,
             generatedAt: generatedAt.toISOString(),
           };
 
@@ -173,6 +183,7 @@ export async function POST(request: Request) {
             kind: "plan_ready",
             planId,
             plan: planContent,
+            markdown,
             userId: input.userId,
             intakeSubmissionId: submissionId,
           });

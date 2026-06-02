@@ -25,6 +25,9 @@ const updatePlanSchema = z
     userId: userIdSchema,
     planId: documentIdSchema,
     plan: coachingPlanContentSchema.optional(),
+    // Convenience: update only the editable Markdown document without resending the
+    // whole plan content. Merged into the existing plan content on the server.
+    markdown: z.string().max(200_000).optional(),
     agentOutputs: coachingAgentOutputsSchema.optional(),
     status: coachingRecordStatusSchema.optional(),
     review: z
@@ -35,9 +38,17 @@ const updatePlanSchema = z
       })
       .optional(),
   })
-  .refine((input) => input.plan || input.agentOutputs || input.status || input.review, {
-    message: "At least one plan, agentOutputs, status, or review update is required.",
-  });
+  .refine(
+    (input) =>
+      input.plan ||
+      input.markdown !== undefined ||
+      input.agentOutputs ||
+      input.status ||
+      input.review,
+    {
+      message: "At least one plan, markdown, agentOutputs, status, or review update is required.",
+    },
+  );
 
 export async function POST(request: Request) {
   try {
@@ -49,8 +60,16 @@ export async function POST(request: Request) {
       "Coaching plan",
     );
 
+    // A full `plan` payload wins; otherwise a lone `markdown` edit is merged into the
+    // existing plan content so the structured data is preserved.
+    const nextPlan = input.plan
+      ? input.plan
+      : input.markdown !== undefined
+        ? { ...existingPlan.plan, markdown: input.markdown }
+        : undefined;
+
     const updatedPlan = await repository.updateCoachingPlan(existingPlan.id, {
-      ...(input.plan ? { plan: input.plan } : {}),
+      ...(nextPlan ? { plan: nextPlan } : {}),
       ...(input.agentOutputs ? { agentOutputs: input.agentOutputs } : {}),
       ...(input.status ? { status: input.status } : {}),
       ...(input.review?.status === "approved" ? { publishedAt: new Date() } : {}),

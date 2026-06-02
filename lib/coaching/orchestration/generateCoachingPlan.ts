@@ -88,6 +88,8 @@ export type GenerateCoachingPlanInput = {
 export type GenerateCoachingPlanResult = {
   plan: CoachingPlanContent;
   agentOutputs: CoachingAgentOutputs;
+  // AI-authored coaching plan as Markdown (Part 2 of the editable document).
+  planMarkdown: string;
 };
 
 export const COACHING_AGENT_TIMELINE: ReadonlyArray<{ step: CoachingStepId; title: string }> = [
@@ -354,13 +356,28 @@ export async function generateCoachingPlan({
       "Final moderator",
       mode,
       {
-        temperature: 0.1,
+        temperature: 0.2,
         maxTokens: 3500,
         messages: [
           {
             role: "system",
-            content:
-              "You are the final coaching plan moderator. Create a safe, practical, review-ready coaching plan from the compressed intake and panel brief. Include safety disclaimers where needed. Return one strict JSON object only with no markdown or commentary.",
+            content: [
+              "You are the final coaching plan moderator. Using the compressed intake and the panel",
+              "brief, write a clear, encouraging, review-ready coaching plan in GitHub-flavored Markdown.",
+              "",
+              "Use exactly these `###` sections, in order:",
+              "### Plan snapshot — 2–4 sentences tying the approach to the client's goal and constraints.",
+              "### Weekly training schedule — a Markdown table with columns | Day | Focus | Key sessions |, one row per training day based on their availability.",
+              "### Session blueprint — a bullet list: warm-up, main work, accessories, conditioning, cooldown.",
+              "### Progression — how to progress over the next 4–8 weeks.",
+              "### Mobility & recovery — a short bullet list.",
+              "### Nutrition starting points — a short bullet list; respect stated restrictions; no medical nutrition therapy.",
+              "### Safety notes — a Markdown blockquote (lines starting with >) covering any clearance/caution guidance and a reminder this is not medical advice.",
+              "",
+              "Rules: Use only the information provided — never invent medical facts. Use **bold** for key terms.",
+              "Do NOT output a top-level title, a 'Part 2' header, JSON, or code fences around the document.",
+              "Start directly with `### Plan snapshot`.",
+            ].join("\n"),
           },
           {
             role: "user",
@@ -374,7 +391,7 @@ export async function generateCoachingPlan({
       onProgress,
     ),
   );
-  const finalPlan = safeJsonParse(finalModerator.content);
+  const planMarkdown = finalModerator.content.trim();
 
   return {
     plan: coachingPlanContentSchema.parse({
@@ -385,16 +402,11 @@ export async function generateCoachingPlan({
         provider: finalModerator.provider,
         model: finalModerator.model,
       },
-      content:
-        Object.keys(objectValue(finalPlan)).length > 0
-          ? objectValue(finalPlan)
-          : {
-              planText: finalModerator.content,
-              validationStatus: "fallback_non_json",
-              warning:
-                "Final moderator returned non-JSON content; raw content is retained for coach review.",
-            },
+      // The editable Markdown document is the source of truth now; `content` keeps a
+      // lightweight marker so legacy structured-JSON consumers don't choke.
+      content: { format: "markdown" },
     }),
+    planMarkdown,
     agentOutputs: coachingAgentOutputsSchema.parse({
       status: "generated",
       routing: routingMetadata(mode),

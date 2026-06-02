@@ -1,91 +1,159 @@
 import Link from "next/link";
 
+import { createCoachingRepository } from "@/lib/coaching/db/coachingRepositoryFactory";
+import type { IntakeSubmission } from "@/lib/coaching/db/coachingRepository";
 import type { CompactClientProfile } from "@/lib/coaching/schemas/intakeSchema";
 
-type AdminSubmissionDetails = CompactClientProfile & {
-  email: string;
-  status: string;
-  submittedAt: string;
-  notes: string;
-};
+import { SubmissionWorkflow } from "../SubmissionWorkflow";
 
-const demoSubmissionDetails: AdminSubmissionDetails = {
-  name: "Alex Rivera",
-  email: "alex@example.com",
-  status: "Ready for review",
-  submittedAt: "May 29, 2026",
-  goals: ["Build strength", "Move without pain"],
-  availability: "4 days per week",
-  equipment: ["Commercial gym", "Dumbbells at home", "Stationary bike"],
-  constraints: ["Prefers morning sessions", "Travel twice per month"],
-  safetySignals: ["Knee-friendly lower-body progressions needed"],
-  nutritionSignals: [],
-  missingInformation: [],
-  notes:
-    "Prefers morning sessions, wants knee-friendly lower-body progressions, and needs short travel workouts twice per month.",
-};
+export const dynamic = "force-dynamic";
 
 type SubmissionDetailPageProps = {
-  params: Promise<{
-    id: string;
-  }>;
+  params: Promise<{ id: string }>;
 };
+
+function field(payload: Record<string, unknown>, key: string): string {
+  const value = payload[key];
+  return typeof value === "string" ? value : value == null ? "" : String(value);
+}
+
+function humanize(value: unknown): string {
+  if (typeof value !== "string" || !value.trim()) return "—";
+  const spaced = value.replace(/_/g, " ").trim();
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+function joinList(value: unknown): string {
+  if (!Array.isArray(value)) return "—";
+  const items = value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+  return items.length > 0 ? items.map(humanize).join(", ") : "—";
+}
+
+async function loadDetail(id: string): Promise<{
+  submission?: IntakeSubmission;
+  initialPlanId?: string;
+  initialMarkdown?: string;
+  error?: string;
+}> {
+  try {
+    const repository = createCoachingRepository();
+    const submission = await repository.getIntakeSubmission(id);
+    if (!submission) return {};
+
+    let initialPlanId: string | undefined;
+    let initialMarkdown: string | undefined;
+    try {
+      const plans = await repository.listCoachingPlans({ userId: submission.userId });
+      const match = plans.find(
+        (plan) =>
+          plan.intakeSubmissionId === submission.id && typeof plan.plan?.markdown === "string",
+      );
+      if (match) {
+        initialPlanId = match.id;
+        initialMarkdown = match.plan.markdown as string;
+      }
+    } catch {
+      // Plan lookup is best-effort; a missing draft just means "Generate" starts fresh.
+    }
+
+    return { submission, initialPlanId, initialMarkdown };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Failed to load submission." };
+  }
+}
 
 export default async function AdminSubmissionDetailPage({ params }: SubmissionDetailPageProps) {
   const { id } = await params;
+  const { submission, initialPlanId, initialMarkdown, error } = await loadDetail(id);
+
+  if (error) {
+    return (
+      <main className="page-shell narrow-shell">
+        <section className="card stack">
+          <h1>Could not load submission</h1>
+          <p className="error-text">{error}</p>
+          <Link className="button-link" href="/admin/submissions">
+            Back to submissions
+          </Link>
+        </section>
+      </main>
+    );
+  }
+
+  if (!submission) {
+    return (
+      <main className="page-shell narrow-shell">
+        <section className="card stack">
+          <h1>Submission not found</h1>
+          <p className="muted-copy">No intake submission matches id {id}.</p>
+          <Link className="button-link" href="/admin/submissions">
+            Back to submissions
+          </Link>
+        </section>
+      </main>
+    );
+  }
+
+  const payload = submission.payload as unknown as Record<string, unknown>;
+  const profile = (payload.clientProfile as CompactClientProfile | undefined) ?? undefined;
+  const name = field(payload, "fullName") || profile?.name || "Unnamed client";
 
   return (
-    <main className="page-shell narrow-shell">
+    <main className="page-shell">
       {/* TODO: Protect this admin route with authentication, authorization, and RBAC before sharing the URL publicly. */}
       <section className="warning-panel">
-        <strong>Admin security TODO:</strong> This detail page is intentionally unauthenticated for
-        v1. Add auth/RBAC before exposing real submission data or sharing this URL publicly.
+        <strong>Admin security TODO:</strong> Unauthenticated detail view containing medical/PII
+        data. Add auth/RBAC before exposing real client data.
       </section>
 
       <section className="hero-panel stack">
-        <p className="eyebrow">Submission {id}</p>
-        <h1>{demoSubmissionDetails.name}</h1>
-        <p>
-          Placeholder detail view for an individual coaching intake. Replace this demo payload with
-          repository-backed data once admin protection is in place.
-        </p>
+        <p className="eyebrow">Submission {submission.id}</p>
+        <h1>{name}</h1>
+        <p>{field(payload, "email") || "No email provided"}</p>
+        <div>
+          <Link className="secondary-link" href="/admin/submissions">
+            ← Back to submissions
+          </Link>
+        </div>
       </section>
 
       <section className="card stack">
-        <div className="section-heading">
-          <h2>Client details</h2>
-          <span>{demoSubmissionDetails.status}</span>
-        </div>
+        <h2>Client snapshot</h2>
         <dl className="detail-list">
           <div>
-            <dt>Email</dt>
-            <dd>{demoSubmissionDetails.email}</dd>
+            <dt>Primary goal</dt>
+            <dd>{humanize(field(payload, "mainGoal"))}</dd>
           </div>
           <div>
-            <dt>Submitted</dt>
-            <dd>{demoSubmissionDetails.submittedAt}</dd>
+            <dt>Goal detail</dt>
+            <dd>{field(payload, "specificGoalDescription") || "—"}</dd>
           </div>
           <div>
-            <dt>Goals</dt>
-            <dd>{demoSubmissionDetails.goals.join(", ")}</dd>
+            <dt>Training level</dt>
+            <dd>{humanize(field(payload, "trainingLevel"))}</dd>
           </div>
           <div>
             <dt>Availability</dt>
-            <dd>{demoSubmissionDetails.availability}</dd>
+            <dd>{profile?.availability || "—"}</dd>
           </div>
           <div>
             <dt>Equipment</dt>
-            <dd>{demoSubmissionDetails.equipment.join(", ")}</dd>
+            <dd>{joinList(payload.equipmentAvailable)}</dd>
           </div>
           <div>
-            <dt>Coach notes</dt>
-            <dd>{demoSubmissionDetails.notes}</dd>
+            <dt>Safety status</dt>
+            <dd>{humanize(field(payload, "safetyStatus"))}</dd>
           </div>
         </dl>
-        <Link className="button-link" href="/admin/submissions">
-          Back to submissions
-        </Link>
       </section>
+
+      <SubmissionWorkflow
+        submissionId={submission.id}
+        userId={submission.userId}
+        payload={payload}
+        initialPlanId={initialPlanId}
+        initialMarkdown={initialMarkdown}
+      />
     </main>
   );
 }

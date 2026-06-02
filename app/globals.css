@@ -539,3 +539,193 @@ button:disabled {
 .legal-page h2 {
   color: var(--foreground);
 }
+
+/* Standalone public intake + confirmation */
+.standalone-shell {
+  max-width: 960px;
+}
+
+.next-steps {
+  color: var(--muted);
+  display: grid;
+  gap: 0.6rem;
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+/* Admin: agent timeline */
+.agent-timeline {
+  display: grid;
+  gap: 0.4rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.agent-timeline li {
+  align-items: center;
+  background: rgba(0, 0, 0, 0.025);
+  border-radius: 0.6rem;
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: 1.25rem 1fr auto;
+  padding: 0.5rem 0.75rem;
+}
+
+.agent-timeline li[data-status="running"] {
+  background: rgba(31, 111, 235, 0.08);
+}
+
+.agent-timeline li[data-status="failed"] {
+  background: rgba(207, 34, 46, 0.08);
+}
+
+/* Admin: markdown workbench */
+.md-toolbar {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.md-toolbar button {
+  padding: 0.6rem 1rem;
+}
+
+.save-ok {
+  color: #1a7f37;
+  font-weight: 700;
+}
+
+.md-workbench {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.md-editor-label {
+  display: grid;
+  font-weight: 700;
+  gap: 0.4rem;
+}
+
+.md-editor {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  min-height: 540px;
+  white-space: pre;
+}
+
+.md-preview-pane {
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  display: grid;
+  gap: 0.5rem;
+  max-height: 620px;
+  overflow: auto;
+  padding: 1.25rem 1.5rem;
+}
+
+.md-preview-label {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+@media (min-width: 1000px) {
+  .md-workbench {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Rendered markdown preview typography */
+.markdown-preview {
+  color: var(--foreground);
+  line-height: 1.6;
+}
+
+.markdown-preview h1 {
+  font-size: 1.6rem;
+  margin: 0 0 0.5rem;
+}
+
+.markdown-preview h2 {
+  border-bottom: 1px solid var(--border);
+  font-size: 1.25rem;
+  margin: 1.5rem 0 0.75rem;
+  padding-bottom: 0.3rem;
+}
+
+.markdown-preview h3 {
+  color: var(--accent-dark);
+  font-size: 1.05rem;
+  margin: 1.2rem 0 0.5rem;
+}
+
+.markdown-preview p {
+  color: var(--foreground);
+  margin: 0.5rem 0;
+}
+
+.markdown-preview ul,
+.markdown-preview ol {
+  margin: 0.5rem 0;
+  padding-left: 1.4rem;
+}
+
+.markdown-preview li {
+  margin: 0.25rem 0;
+}
+
+.markdown-preview blockquote {
+  background: #eff6ff;
+  border-left: 4px solid var(--accent);
+  border-radius: 0 0.5rem 0.5rem 0;
+  color: var(--muted);
+  margin: 0.75rem 0;
+  padding: 0.5rem 1rem;
+}
+
+.markdown-preview table {
+  border: 1px solid var(--border);
+  border-collapse: collapse;
+  display: block;
+  margin: 0.75rem 0;
+  min-width: 0;
+  overflow-x: auto;
+  width: 100%;
+}
+
+.markdown-preview th,
+.markdown-preview td {
+  border: 1px solid var(--border);
+  font-size: 0.92rem;
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+
+.markdown-preview th {
+  background: #f4f6fb;
+  text-transform: none;
+}
+
+.markdown-preview code {
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 0.35rem;
+  font-size: 0.85em;
+  padding: 0.1rem 0.35rem;
+}
+
+.markdown-preview hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 1.25rem 0;
+}
+
+.markdown-preview a {
+  color: var(--accent);
+}

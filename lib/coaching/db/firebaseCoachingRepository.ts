@@ -140,6 +140,15 @@ export class FirebaseCoachingRepository implements CoachingRepository {
     );
   }
 
+  async listAllIntakeSubmissions(limit?: number): Promise<IntakeSubmission[]> {
+    let query: Query<DocumentData> = this.intakeSubmissions().orderBy("createdAt", "desc");
+    if (limit) {
+      query = query.limit(limit);
+    }
+
+    return listDocuments(query, (data) => mapIntakeSubmission(data as StoredIntakeSubmission));
+  }
+
   async updateIntakeSubmission(
     id: string,
     updates: Parameters<CoachingRepository["updateIntakeSubmission"]>[1],

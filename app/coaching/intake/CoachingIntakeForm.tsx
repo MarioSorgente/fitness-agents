@@ -608,7 +608,13 @@ function collectRequiredErrors(fields: IntakeField[], data: IntakeFormData): str
   return errors;
 }
 
-export function CoachingIntakeForm() {
+export type CoachingIntakeFormMode = "internal" | "standalone";
+
+export function CoachingIntakeForm({
+  mode = "internal",
+}: {
+  mode?: CoachingIntakeFormMode;
+} = {}) {
   const router = useRouter();
   const [currentStep, setCurrentStep] = useState(0);
   const [formData, setFormData] = useState<IntakeFormData>(() => createInitialFormData());
@@ -684,8 +690,18 @@ export function CoachingIntakeForm() {
 
       const submissionId = result?.data?.submission?.id;
       const userId = payload.email ?? "anonymous-intake";
-      // Stash the server-validated payload so the thank-you page can drive plan
-      // generation without a cross-Lambda lookup. SessionStorage scope is the tab,
+
+      if (mode === "standalone") {
+        // External clients only submit their data — they must never trigger the
+        // coaching agents or PDF generation. Land them on a simple confirmation.
+        const confirmParams = new URLSearchParams();
+        if (submissionId) confirmParams.set("ref", String(submissionId));
+        router.push(`/coaching/submitted?${confirmParams.toString()}`);
+        return;
+      }
+
+      // Internal flow: stash the server-validated payload so the thank-you page can drive
+      // plan generation without a cross-Lambda lookup. SessionStorage scope is the tab,
       // which matches our usage (form → thank-you in the same tab).
       const validatedPayload = result?.data?.payload ?? payload;
       try {
@@ -735,32 +751,34 @@ export function CoachingIntakeForm() {
 
   return (
     <section className="intake-shell">
-      <div
-        className="card stack"
-        style={{
-          background: "rgba(255, 221, 87, 0.12)",
-          border: "1px dashed rgba(255, 200, 0, 0.5)",
-          padding: "12px 16px",
-          marginBottom: "16px",
-        }}
-      >
-        <strong>Test helpers</strong>
-        <div className="button-row">
-          <button
-            type="button"
-            onClick={handleQuickSubmit}
-            disabled={submissionState.status === "submitting"}
-          >
-            {submissionState.status === "submitting"
-              ? "Submitting…"
-              : "Quick submit (sample)"}
-          </button>
+      {TEST_HELPER_ENABLED ? (
+        <div
+          className="card stack"
+          style={{
+            background: "rgba(255, 221, 87, 0.12)",
+            border: "1px dashed rgba(255, 200, 0, 0.5)",
+            padding: "12px 16px",
+            marginBottom: "16px",
+          }}
+        >
+          <strong>Test helpers</strong>
+          <div className="button-row">
+            <button
+              type="button"
+              onClick={handleQuickSubmit}
+              disabled={submissionState.status === "submitting"}
+            >
+              {submissionState.status === "submitting"
+                ? "Submitting…"
+                : "Quick submit (sample)"}
+            </button>
+          </div>
+          <small className="muted-copy">
+            Fills the form with valid sample data and submits in one click. Dev/test only — hidden
+            in production.
+          </small>
         </div>
-        <small className="muted-copy">
-          Fills the form with valid sample data and submits in one click. Always visible while
-          we iterate.
-        </small>
-      </div>
+      ) : null}
       <div className="intake-progress card">
         <div>
           <p className="eyebrow">Client intake</p>
