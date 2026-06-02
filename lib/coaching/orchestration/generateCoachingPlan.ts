@@ -22,43 +22,27 @@ import {
   type CoachingPlanContent,
 } from "../schemas/coachingPlanSchema";
 import type { CoachingIntake, JsonObject, JsonValue } from "../schemas/intakeSchema";
+// All agent prompt text lives under ../prompts (one file per agent). This file only sequences
+// the steps; edit wording there, not here.
+import {
+  buildExpertSystemPrompt,
+  buildExpertUserPrompt,
+  buildIntakeCompressionUserPrompt,
+  buildNutritionPlanWriterSystemPrompt,
+  buildTrainingPlanWriterSystemPrompt,
+  describePlanDuration,
+  EXPERT_STEPS,
+  intakeCompressionSystemPrompt,
+  panelBriefSystemPrompt,
+} from "../prompts";
 
-const EXPERT_STEPS: Array<{
-  id: CoachingStepId;
-  title: string;
-  instruction: string;
-}> = [
-  {
-    id: "medical_safety_screener",
-    title: "Medical safety screener",
-    instruction:
-      "Identify medical red flags, contraindications, information that requires clinician clearance, and safe coaching boundaries. Do not diagnose.",
-  },
-  {
-    id: "physio_reviewer",
-    title: "Physio reviewer",
-    instruction:
-      "Review movement limitations, pain considerations, regressions, progressions, and referral triggers from a conservative rehab-aware coaching lens.",
-  },
-  {
-    id: "fitness_coach",
-    title: "Fitness coach",
-    instruction:
-      "Design a concrete program direction: pick a specific training split and weekly frequency that fit the available days, equipment, and level; name the priority compound and accessory exercises the plan should include, and the exercises to avoid given any injuries; specify set, rep, and intensity (RPE/%1RM) schemes for the goal; and define a phase-by-phase progression model with deloads and measurable milestones.",
-  },
-  {
-    id: "mobility_coach",
-    title: "Mobility coach",
-    instruction:
-      "Recommend mobility, warm-up, cooldown, recovery, and movement-prep priorities that support the plan and the stated limitations.",
-  },
-  {
-    id: "nutrition_reviewer",
-    title: "Nutrition reviewer",
-    instruction:
-      "Give concrete nutrition direction: estimate a daily calorie and macro (protein/carbs/fat) target range for the goal and bodyweight; recommend a meal count and structure; list every allergy, intolerance, and dietary restriction to honor plus the liked foods to build around; and assess which eating approaches (e.g. intermittent fasting, meal frequency, carb cycling) suit or do not suit this client and why. Do not prescribe medical nutrition therapy or unsafe restriction.",
-  },
-];
+// Re-export the plan-duration config so existing importers (e.g. the generate-plan route) keep
+// working after the prompt text moved to ../prompts/shared/planDuration.
+export {
+  PLAN_DURATION_WEEKS,
+  DEFAULT_PLAN_DURATION_WEEKS,
+  type PlanDurationWeeks,
+} from "../prompts";
 
 export type CoachingProgressEvent =
   | { kind: "step_started"; step: CoachingStepId; title: string }
@@ -105,78 +89,6 @@ export const COACHING_AGENT_TIMELINE: ReadonlyArray<{ step: CoachingStepId; titl
   { step: "training_plan_writer", title: "Training plan writer" },
   { step: "nutrition_plan_writer", title: "Nutrition plan writer" },
 ];
-
-// Allowed plan durations (weeks) the admin can choose before generating.
-export const PLAN_DURATION_WEEKS = [1, 4, 12, 24] as const;
-export type PlanDurationWeeks = (typeof PLAN_DURATION_WEEKS)[number];
-export const DEFAULT_PLAN_DURATION_WEEKS: PlanDurationWeeks = 12;
-
-type PlanDurationDescriptor = {
-  weeks: PlanDurationWeeks;
-  label: string;
-  // Instruction block injected into the training writer prompt describing how many phases to
-  // write and how they progress. Nutrition reuses the same phase framing for calorie scaling.
-  phaseGuidance: string;
-  // Output budget for the training writer; longer programs need more room.
-  trainingMaxTokens: number;
-};
-
-function normalizePlanDurationWeeks(value: number | undefined): PlanDurationWeeks {
-  return (PLAN_DURATION_WEEKS as readonly number[]).includes(value ?? NaN)
-    ? (value as PlanDurationWeeks)
-    : DEFAULT_PLAN_DURATION_WEEKS;
-}
-
-function describePlanDuration(weeksInput: number | undefined): PlanDurationDescriptor {
-  const weeks = normalizePlanDurationWeeks(weeksInput);
-
-  switch (weeks) {
-    case 1:
-      return {
-        weeks,
-        label: "1 week (sample week)",
-        phaseGuidance:
-          "Write ONE fully detailed training week (no phases). After the week, add a short " +
-          "**How to progress into week 2** note describing how to add load or reps next week.",
-        trainingMaxTokens: 3500,
-      };
-    case 4:
-      return {
-        weeks,
-        label: "4 weeks (1 month)",
-        phaseGuidance:
-          "Write a single **4-week mesocycle**: one detailed weekly template, explicit weekly " +
-          "load/rep progression across weeks 1–3, and a **deload in week 4**.",
-        trainingMaxTokens: 5000,
-      };
-    case 12:
-      return {
-        weeks,
-        label: "12 weeks (3 months)",
-        phaseGuidance:
-          "Write **three 4-week phases** — **Phase 1 Foundation (weeks 1–4)**, **Phase 2 Build " +
-          "(weeks 5–8)**, **Phase 3 Intensify (weeks 9–12)**. For each phase give the full weekly " +
-          "template (day-by-day exercise tables), the within-phase weekly progression, and a " +
-          "**deload at the end of each phase**. Show how exercise selection and intensity change " +
-          "from phase to phase.",
-        trainingMaxTokens: 7000,
-      };
-    case 24:
-    default:
-      return {
-        weeks: 24,
-        label: "24 weeks (6 months)",
-        phaseGuidance:
-          "Write **four phases across 24 weeks** — **Phase 1 Foundation (weeks 1–4)**, **Phase 2 " +
-          "Hypertrophy (weeks 5–12)**, **Phase 3 Strength (weeks 13–20)**, **Phase 4 Peak/Refine " +
-          "(weeks 21–24)** (adapt the emphasis to the client's goal). For each phase give the full " +
-          "weekly template (day-by-day exercise tables), the within-phase weekly progression, and a " +
-          "**deload at the end of each phase**, plus one planned recovery/reset week. Show how " +
-          "exercise selection and intensity change from phase to phase.",
-        trainingMaxTokens: 9000,
-      };
-  }
-}
 
 type StepRun = {
   step: CoachingStepId;
@@ -343,14 +255,11 @@ export async function generateCoachingPlan({
         messages: [
           {
             role: "system",
-            content:
-              "You compress coaching intakes into a privacy-minimized structured brief. Preserve safety-relevant facts, goals, constraints, equipment, schedule, and missing information. Do not invent details. Return a single valid JSON object only with no markdown or commentary.",
+            content: intakeCompressionSystemPrompt,
           },
           {
             role: "user",
-            content: `Compress this raw intake into JSON with keys: clientProfile, goals, schedule, equipment, constraints, safetySignals, nutritionSignals, missingInformation, coachSummary. Raw intake:\n${JSON.stringify(
-              intakePayload,
-            )}`,
+            content: buildIntakeCompressionUserPrompt(intakePayload),
           },
         ],
       },
@@ -377,11 +286,11 @@ export async function generateCoachingPlan({
         messages: [
           {
             role: "system",
-            content: `You are the ${expert.title} in a coaching plan panel. ${expert.instruction} Return one strict JSON object only with keys: findings, recommendations, risks, followUps. Be specific and concrete — name exercises, schemes, foods, and numbers where relevant. Do not wrap the JSON in markdown.`,
+            content: buildExpertSystemPrompt(expert.title, expert.instruction),
           },
           {
             role: "user",
-            content: `Use only this compressed intake brief. Do not request or rely on the full raw intake.\n${compressedIntakeText}`,
+            content: buildExpertUserPrompt(compressedIntakeText),
           },
         ],
       },
@@ -407,8 +316,7 @@ export async function generateCoachingPlan({
         messages: [
           {
             role: "system",
-            content:
-              "You merge expert panel notes into a concise moderator brief. Highlight agreements, conflicts, safety gates, and the safest actionable plan direction. Preserve the concrete training and nutrition specifics the experts provided (split, exercises, set/rep schemes, calorie/macro targets, suitable eating approaches) so the plan writers can act on them. Return one strict JSON object only with no markdown or commentary.",
+            content: panelBriefSystemPrompt,
           },
           {
             role: "user",
@@ -447,58 +355,7 @@ export async function generateCoachingPlan({
         messages: [
           {
             role: "system",
-            content: [
-              "You are an elite strength & conditioning coach writing the TRAINING half of a",
-              "client's coaching plan in GitHub-flavored Markdown. Use ONLY the compressed intake and",
-              "panel brief. Respect every stated injury, equipment limit, available day, session",
-              "length, and safety gate. Never invent medical facts. Match the depth of professional",
-              "programs (e.g. Muscle & Strength routines): a named split, day-by-day exercise tables,",
-              "and an explicit progression model.",
-              "",
-              `The client wants a **${planDuration.label}** program.`,
-              "",
-              "Write these `###` sections in order:",
-              "",
-              "### Plan snapshot",
-              "2–4 sentences tying the approach to the goal, level, and constraints; state the chosen",
-              "split (e.g. Push/Pull/Legs, Upper/Lower, Full Body) and weekly frequency.",
-              "",
-              "### Training overview",
-              "Bullets: goal, training level, days/week, session length, equipment, split rationale.",
-              "",
-              planDuration.phaseGuidance,
-              "",
-              "For EACH phase output:",
-              "- a `####` header with the week range and focus (e.g. \"#### Phase 1 — Foundation (Weeks 1–4)\").",
-              "- for each training day a `#####` header (e.g. \"##### Day 1 — Upper (Strength)\") followed by",
-              "  a Markdown table with columns: | Exercise | Sets | Reps | Rest | Tempo/RPE | Notes |.",
-              "  Include 5–8 concrete, named exercises per day suited to the goal, level, equipment, and",
-              "  constraints; give specific sets, rep ranges, rest, and an RPE or tempo, plus a coaching",
-              "  cue or regression/progression in Notes.",
-              "- a `**Warm-up:**` line, a `**Progression this phase:**` line (how to add load/reps week to",
-              "  week), and a note on the deload week.",
-              "",
-              "### Session structure",
-              "Bullets describing the universal flow of every session (general warm-up, specific ramp",
-              "sets, main lifts, accessories, optional conditioning, cooldown) with time estimates that",
-              "fit the client's session length.",
-              "",
-              "### Progression & milestones",
-              "How the client advances across the whole program; measurable milestones tied to the goal;",
-              "when to add load or retest; RPE/RIR autoregulation guidance.",
-              "",
-              "### Mobility & recovery",
-              "Bullets: mobility/warm-up priorities, between-session recovery, sleep, and rehab-aware",
-              "movement prep for any stated limitations.",
-              "",
-              "### Safety notes",
-              "A Markdown blockquote (lines starting with >) covering clearance/caution from the safety",
-              "gates and a reminder this is not medical advice.",
-              "",
-              "Rules: use **bold** for key terms; use real, specific exercises and real numbers — never",
-              "vague phrases like \"do some sets\". Do NOT output a top-level # title or code fences around",
-              "the document. Start directly with `### Plan snapshot`.",
-            ].join("\n"),
+            content: buildTrainingPlanWriterSystemPrompt(planDuration),
           },
           {
             role: "user",
@@ -524,55 +381,7 @@ export async function generateCoachingPlan({
         messages: [
           {
             role: "system",
-            content: [
-              "You are a dietitian-style nutrition coach writing the NUTRITION half of a client's",
-              "coaching plan in GitHub-flavored Markdown. Use ONLY the compressed intake and panel",
-              "brief. Honor every allergy, intolerance, dietary restriction, and disliked food; prefer",
-              "foods the client already likes. Do NOT prescribe medical nutrition therapy or unsafe",
-              "restriction.",
-              "",
-              `This nutrition plan supports a **${planDuration.label}** training program.`,
-              "",
-              "Write these `###` sections in order:",
-              "",
-              "### Nutrition snapshot",
-              "2–4 sentences tying the approach to the goal, current habits, and constraints.",
-              "",
-              "### Daily targets",
-              "Estimated daily calories + macro targets (protein/carbs/fat in grams) as a small table or",
-              "bullets; one line on how they were estimated (tie protein to bodyweight) and that they are",
-              "starting points to adjust.",
-              "",
-              "### Weekly meal plan (Monday–Friday)",
-              "A Markdown table with columns | Meal | Mon | Tue | Wed | Thu | Fri | and rows: Breakfast,",
-              "Lunch, Dinner, Snack 1, Snack 2. Each cell is a concrete meal with an approximate portion",
-              "(and rough calories). Honor all restrictions and use liked foods. Keep meals realistic and",
-              "repeatable.",
-              "",
-              "### Weekend & flexibility",
-              "Bullets: lighter Saturday/Sunday guidance, eating out, and one flexible/treat slot to",
-              "support adherence.",
-              "",
-              "### Alternative approaches",
-              "2–3 optional eating styles with who they suit plus a one-line pro/con and safety caveat,",
-              "e.g. **Intermittent fasting (16:8)**, **3 meals vs 5 small meals**, **carb cycling around",
-              "training days**. Recommend the best fit for THIS client.",
-              "",
-              "### Adjusting over time",
-              "How to scale calories/portions across the program phases as bodyweight and performance",
-              "change (e.g. recalibrate every 3–4 weeks); simple progress signals to watch.",
-              "",
-              "### Hydration & habits",
-              "Bullets: water target; caffeine/alcohol notes aligned to the intake; 2–3 keystone habits.",
-              "",
-              "### Nutrition safety notes",
-              "A Markdown blockquote (lines starting with >): general wellness guidance, not medical",
-              "nutrition therapy; consult a professional for clinical conditions or allergies.",
-              "",
-              "Rules: use **bold** for key terms; use concrete foods and real numbers; honor every",
-              "allergy/intolerance/restriction. Do NOT output a top-level # title or code fences. Start",
-              "directly with `### Nutrition snapshot`.",
-            ].join("\n"),
+            content: buildNutritionPlanWriterSystemPrompt(planDuration),
           },
           {
             role: "user",
