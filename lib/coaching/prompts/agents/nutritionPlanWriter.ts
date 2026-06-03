@@ -11,6 +11,8 @@
  * Audit note: draft AND revised (challenge) outputs are both stored in `agentOutputs`, so diffing
  * them is the machine-readable "audit log of decisions" — the client document stays clean Markdown.
  */
+import { COACH_QUALITY_RULES } from "../shared/coachQuality";
+import { COACH_VOICE } from "../shared/coachVoice";
 import type { PlanDurationDescriptor } from "../shared/planDuration";
 
 /** Static section spec shared by the draft and challenge passes. */
@@ -28,20 +30,37 @@ function nutritionSectionSpec(planDuration: PlanDurationDescriptor): string[] {
     "bullets. Show the **method** in one or two lines: an estimated maintenance/TDEE from",
     "bodyweight + activity, the goal adjustment (deficit/surplus), and protein tied to bodyweight.",
     "State clearly these are **starting points to adjust**.",
+    "Also set a **daily fiber target** and a **fruit & vegetable** target (servings/day), and one",
+    "line on key **micronutrients** to cover from whole foods.",
     "",
     "### Weekly meal plan (Monday–Friday)",
     "A Markdown table with columns | Meal | Mon | Tue | Wed | Thu | Fri | and rows: Breakfast,",
     "Lunch, Dinner, Snack 1, Snack 2. Each cell is a concrete meal with an approximate portion,",
     "rough calories, and protein. Honor all restrictions and use liked foods. Keep meals realistic",
     "and repeatable, and roughly hit the daily targets.",
+    "Match meals to the client's **cultural/cuisine preferences** and a sensible **budget tier**;",
+    "favor affordable, common ingredients.",
+    "Example cell (format only — replace with real meals): \"Greek yogurt (200g) + berries + oats",
+    "(40g) — ~350 kcal, 25g protein\".",
     "",
     "### Peri-workout nutrition",
     "Bullets: what/when to eat **before, (optionally) during, and after** training sessions, and how",
     "training days may differ from rest days (e.g. carbs around sessions).",
     "",
+    "### Supplements (optional)",
+    "A short, **food-first** list of only well-evidenced options that fit the goal — e.g. creatine",
+    "monohydrate, a protein powder to reach protein, caffeine pre-training, and vitamin D / omega-3",
+    "if the diet has gaps. Mark each **optional**, give a typical amount only when well-established,",
+    "and add: this is not medical advice — check with a professional first. Skip anything the client",
+    "cannot take given their intake.",
+    "",
     "### Weekend & flexibility",
     "Bullets: lighter Saturday/Sunday guidance, eating out, and one flexible/treat slot to support",
     "adherence.",
+    "",
+    "### Alcohol & eating out",
+    "Goal-aligned alcohol guidance (sensible limits, lower-calorie choices, timing) and 2–3 concrete",
+    "restaurant/ordering tactics that keep the client on track socially.",
     "",
     "### Substitutions & swaps",
     "For the main staples in the meal plan, give allergy/intolerance/dislike-safe swaps and a couple",
@@ -95,6 +114,8 @@ export function buildNutritionPlanWriterSystemPrompt(
     "allergy, intolerance, dietary restriction, and disliked food; prefer foods the client already",
     "likes. Do NOT prescribe medical nutrition therapy or unsafe restriction.",
     "",
+    COACH_VOICE,
+    "",
     ...NUTRITION_PURPOSE,
     "",
     "You own the nutrition analysis (there is no separate nutrition reviewer). Before writing,",
@@ -106,6 +127,8 @@ export function buildNutritionPlanWriterSystemPrompt(
     ...nutritionSectionSpec(planDuration),
     "",
     ...NUTRITION_RULES,
+    "",
+    COACH_QUALITY_RULES,
   ].join("\n");
 }
 
@@ -120,6 +143,8 @@ export function buildNutritionPlanChallengePrompt(
   return [
     "You are the same dietitian-style nutrition coach, now in a CROSS-DISCIPLINE review with the",
     "strength coach. You are given your own nutrition draft and the training coach's draft.",
+    "",
+    COACH_VOICE,
     "",
     "First, CHALLENGE the training plan wherever it conflicts with sound nutrition/recovery, e.g.:",
     "- is the weekly training volume/frequency recoverable on the calories the goal allows?",
@@ -139,5 +164,7 @@ export function buildNutritionPlanChallengePrompt(
     ...nutritionSectionSpec(planDuration),
     "",
     ...NUTRITION_RULES,
+    "",
+    COACH_QUALITY_RULES,
   ].join("\n");
 }

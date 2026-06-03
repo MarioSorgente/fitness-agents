@@ -370,7 +370,7 @@ export async function generateCoachingPlan({
 
   // Shared context for both writers. They receive the panel brief and the chosen duration so
   // they prescribe a complete, phased program rather than a vague outline.
-  const NUTRITION_MAX_TOKENS = 5500;
+  const NUTRITION_MAX_TOKENS = 6500;
   const planDurationContext = { weeks: planDuration.weeks, label: planDuration.label };
   const writerUserMessage = JSON.stringify({
     compressedIntake,

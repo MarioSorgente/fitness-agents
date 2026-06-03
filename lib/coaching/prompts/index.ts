@@ -39,6 +39,8 @@ export {
 } from "./agents/nutritionPlanWriter";
 
 // Shared fragments / helpers
+export { COACH_VOICE } from "./shared/coachVoice";
+export { COACH_QUALITY_RULES } from "./shared/coachQuality";
 export {
   type ExpertStep,
   buildExpertSystemPrompt,

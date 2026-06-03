@@ -34,6 +34,10 @@ Shared fragments reused across agents:
   reviewers (steps 2–4), and the user message that hands them the compressed intake.
 - `shared/planDuration.ts` — the phase/progression wording for 1 / 4 / 12 / 24-week plans
   (injected into the training writer) plus the per-length output-token budget.
+- `shared/coachVoice.ts` — the fixed **house voice** (warm/direct/plain), reading level, units, and
+  personalization, shared by both writers and both their passes. Edit once to retone every plan.
+- `shared/coachQuality.ts` — the shared **quality bar** (brief "why", anti-vagueness rules,
+  adherence-first), applied to both writers and both passes.
 
 ## Conventions
 
