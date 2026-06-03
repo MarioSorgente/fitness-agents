@@ -12,6 +12,8 @@
  * diffing them is the machine-readable "audit log of decisions" — the client document stays clean
  * Markdown rather than carrying a raw JSON dump.
  */
+import { COACH_QUALITY_RULES } from "../shared/coachQuality";
+import { COACH_VOICE } from "../shared/coachVoice";
 import type { PlanDurationDescriptor } from "../shared/planDuration";
 
 /** Static section spec shared by the draft and challenge passes. */
@@ -36,6 +38,8 @@ function trainingSectionSpec(planDuration: PlanDurationDescriptor): string[] {
     "- a `####` header with the week range and focus (e.g. \"#### Phase 1 — Foundation (Weeks 1–4)\").",
     "- for each training day a `#####` header (e.g. \"##### Day 1 — Upper (Strength)\") followed by",
     "  a Markdown table with columns: | Exercise | Sets | Reps | Rest | Tempo/RPE | Notes |.",
+    "  Example row (format only — replace with the client's real exercises, do not copy these):",
+    "  `| Goblet Squat | 3 | 8–10 | 90s | RPE 7 | brace ribs down; sub leg press if knee flares |`",
     "  Include 5–8 concrete, named exercises per day (primary compound(s) first, then accessories)",
     "  suited to the goal, level, equipment, and constraints; give specific sets, rep ranges, rest,",
     "  and an RPE or %1RM, plus a coaching cue or regression/progression in Notes.",
@@ -47,11 +51,23 @@ function trainingSectionSpec(planDuration: PlanDurationDescriptor): string[] {
     "Bullets describing the universal flow of every session (general warm-up, specific ramp sets,",
     "main lifts, accessories, optional conditioning, cooldown) with time estimates that fit the",
     "client's session length.",
+    "If session time is tight, pair exercises into **supersets/circuits** (or EMOM) to fit the work",
+    "in, and say which pairs.",
+    "",
+    "### Conditioning & daily activity",
+    "Prescribe cardio/conditioning tuned to the goal (type, frequency, duration, intensity) and a",
+    "**daily step / NEAT target**. Bias higher for fat-loss goals, lower for pure",
+    "strength/hypertrophy. Keep it compatible with the training days above.",
     "",
     "### Progression, milestones & reassessment",
     "How the client advances across the whole program; **measurable milestones** tied to the goal;",
     "when to add load or retest; **reassessment points** (e.g. end of each phase) and what to",
     "measure; RPE/RIR **auto-regulation** guidance for good vs bad days.",
+    "",
+    "### What to expect",
+    "2–4 honest, encouraging bullets on realistic progress for this goal and level — rough",
+    "timeframes and ranges (strength gains, fat-loss rate, when visible change is likely) — and a",
+    "note that results vary with consistency.",
     "",
     "### Substitutions & contraindications",
     "List any movements to **avoid** given the injuries / physio notes in the brief, each paired",
@@ -95,6 +111,8 @@ export function buildTrainingPlanWriterSystemPrompt(planDuration: PlanDurationDe
     "Never invent medical facts. Match the depth of professional programs (e.g. Muscle & Strength",
     "routines): a named split, day-by-day exercise tables, and an explicit progression model.",
     "",
+    COACH_VOICE,
+    "",
     ...TRAINING_PURPOSE,
     "",
     "You own the program design (there is no separate fitness analyst). Before writing, decide: the",
@@ -106,6 +124,8 @@ export function buildTrainingPlanWriterSystemPrompt(planDuration: PlanDurationDe
     ...trainingSectionSpec(planDuration),
     "",
     ...TRAINING_RULES,
+    "",
+    COACH_QUALITY_RULES,
   ].join("\n");
 }
 
@@ -118,6 +138,8 @@ export function buildTrainingPlanChallengePrompt(planDuration: PlanDurationDescr
   return [
     "You are the same elite strength & conditioning coach, now in a CROSS-DISCIPLINE review with",
     "the nutrition coach. You are given your own training draft and the nutrition coach's draft.",
+    "",
+    COACH_VOICE,
     "",
     "First, CHALLENGE the nutrition plan wherever it conflicts with the training demands, e.g.:",
     "- is energy/calorie intake adequate for the training volume and intensity you prescribed?",
@@ -137,5 +159,7 @@ export function buildTrainingPlanChallengePrompt(planDuration: PlanDurationDescr
     ...trainingSectionSpec(planDuration),
     "",
     ...TRAINING_RULES,
+    "",
+    COACH_QUALITY_RULES,
   ].join("\n");
 }

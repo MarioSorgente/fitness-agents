@@ -188,6 +188,8 @@ repeats this table.
 | --- | --- |
 | [shared/expertSystemTemplate.ts](../lib/coaching/prompts/shared/expertSystemTemplate.ts) | The role wrapper + strict JSON output contract shared by the panel reviewers (steps **2–4**), plus the user message handing them the compressed intake. Edit once → affects all three reviewers. |
 | [shared/planDuration.ts](../lib/coaching/prompts/shared/planDuration.ts) | The phase/progression wording for 1 / 4 / 12 / 24‑week plans (injected into the training writer) and the per‑length output‑token budget. |
+| [shared/coachVoice.ts](../lib/coaching/prompts/shared/coachVoice.ts) | The fixed **house voice** + reading level + units + personalization, shared by both writers and both their passes. Edit once → changes the tone of every plan. |
+| [shared/coachQuality.ts](../lib/coaching/prompts/shared/coachQuality.ts) | The shared **quality bar** (brief "why", anti‑vagueness, adherence‑first), applied to both writers and both passes. |
 
 ### Convention
 - Static prompt → exported `const` string.
