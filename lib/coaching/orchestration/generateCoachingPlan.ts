@@ -22,6 +22,7 @@ import {
   type CoachingPlanContent,
 } from "../schemas/coachingPlanSchema";
 import type { CoachingIntake, JsonObject, JsonValue } from "../schemas/intakeSchema";
+import { computeEnergyTargets, summarizeEnergyTargets } from "../nutrition/energyTargets";
 // All agent prompt text lives under ../prompts (one file per agent). This file only sequences
 // the steps; edit wording there, not here.
 import {
@@ -273,6 +274,11 @@ export async function generateCoachingPlan({
 }: GenerateCoachingPlanInput): Promise<GenerateCoachingPlanResult> {
   const planDuration = describePlanDuration(planDurationWeeks);
 
+  // Compute calorie + macro targets deterministically from the RAW intake (sex, age, height,
+  // weight, goal, activity) BEFORE any LLM call, so the numbers are sex- and body-composition-aware
+  // and sanity-bounded. The writers consume these fixed numbers instead of inventing a TDEE.
+  const energyTargets = computeEnergyTargets(intakePayload);
+
   const intakeCompression = completionToStepRun(
     "intake_compression",
     "Intake compression",
@@ -358,6 +364,7 @@ export async function generateCoachingPlan({
             content: JSON.stringify({
               compressedIntake,
               expertOutputs,
+              energyTargetsSummary: summarizeEnergyTargets(energyTargets),
             }),
           },
         ],
@@ -372,10 +379,25 @@ export async function generateCoachingPlan({
   // they prescribe a complete, phased program rather than a vague outline.
   const NUTRITION_MAX_TOKENS = 6500;
   const planDurationContext = { weeks: planDuration.weeks, label: planDuration.label };
-  const writerUserMessage = JSON.stringify({
+  // The training writer only needs a compact body-composition signal (to tune conditioning/steps
+  // and reference real calories in the cross-review); the nutrition writer gets the full targets.
+  const trainingEnergyContext = {
+    targetCalories: energyTargets.targetCalories,
+    goalAdjustmentPct: energyTargets.goalAdjustmentPct,
+    bmiCategory: energyTargets.bmiCategory,
+    sex: energyTargets.sex,
+  };
+  const trainingWriterUserMessage = JSON.stringify({
     compressedIntake,
     panelBrief: panelBriefOutput,
     planDuration: planDurationContext,
+    energyContext: trainingEnergyContext,
+  });
+  const nutritionWriterUserMessage = JSON.stringify({
+    compressedIntake,
+    panelBrief: panelBriefOutput,
+    planDuration: planDurationContext,
+    authoritativeEnergyTargets: energyTargets,
   });
 
   // ROUND 1 — DRAFT. The two domain writers work independently and in parallel (async).
@@ -386,7 +408,7 @@ export async function generateCoachingPlan({
       "Training plan — draft",
       mode,
       buildTrainingPlanWriterSystemPrompt(planDuration),
-      writerUserMessage,
+      trainingWriterUserMessage,
       planDuration.trainingMaxTokens,
       onProgress,
     ),
@@ -396,7 +418,7 @@ export async function generateCoachingPlan({
       "Nutrition plan — draft",
       mode,
       buildNutritionPlanWriterSystemPrompt(planDuration),
-      writerUserMessage,
+      nutritionWriterUserMessage,
       NUTRITION_MAX_TOKENS,
       onProgress,
     ),
@@ -408,6 +430,7 @@ export async function generateCoachingPlan({
     compressedIntake,
     panelBrief: panelBriefOutput,
     planDuration: planDurationContext,
+    energyContext: trainingEnergyContext,
     yourTrainingDraft: trainingDraft.content,
     nutritionCoachDraft: nutritionDraft.content,
   });
@@ -415,6 +438,7 @@ export async function generateCoachingPlan({
     compressedIntake,
     panelBrief: panelBriefOutput,
     planDuration: planDurationContext,
+    authoritativeEnergyTargets: energyTargets,
     yourNutritionDraft: nutritionDraft.content,
     trainingCoachDraft: trainingDraft.content,
   });
@@ -490,6 +514,9 @@ export async function generateCoachingPlan({
       compressedIntake,
       expertOutputs,
       panelBrief: panelBriefOutput,
+      // Deterministic calorie/macro targets the nutrition writer was required to use — stored so a
+      // reviewer can confirm the plan's numbers match the sex-/body-composition-aware computation.
+      energyTargets,
       // Round 1 drafts kept alongside the round 2 (cross-reviewed) finals — diffing draft vs final
       // is the audit log of what each coach changed after challenging the other.
       trainingPlanDraft: { ...trainingDraft },

@@ -2,6 +2,7 @@ import type { CoachingPlan, PdfGenerationRequest } from "../schemas/coachingPlan
 import { CoachingPlanPdf, type CoachingPlanPdfDocument } from "./CoachingPlanPdf";
 import { pdfTheme, type PdfColor, type PdfFontName } from "./pdfTheme";
 import type { PdfSection, PdfSectionBlock } from "./sections";
+import { escapePdf, sanitizeAscii, sanitizeWinAnsi } from "./winAnsi";
 
 type PdfTextLine = {
   text: string;
@@ -20,10 +21,6 @@ const FONT_RESOURCE_NAMES: Record<PdfFontName, string> = {
   [pdfTheme.fonts.bold]: "F2",
   [pdfTheme.fonts.mono]: "F3",
 };
-
-function escapePdfText(value: string): string {
-  return value.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
-}
 
 function textWidthEstimate(text: string, fontSize: number): number {
   return text.length * fontSize * 0.52;
@@ -239,7 +236,7 @@ function pageContentStream(page: PdfPage, pageNumber: number, pageCount: number)
         `${color.map((part) => part.toFixed(3)).join(" ")} rg`,
         `/${FONT_RESOURCE_NAMES[line.font]} ${line.size} Tf`,
         `${x} ${y.toFixed(2)} Td`,
-        `(${escapePdfText(line.text)}) Tj`,
+        `(${escapePdf(sanitizeWinAnsi(line.text))}) Tj`,
         "ET",
       );
     }
@@ -259,7 +256,8 @@ function pageContentStream(page: PdfPage, pageNumber: number, pageCount: number)
 }
 
 function pdfStringObject(value: string): string {
-  return `(${escapePdfText(value)})`;
+  // Info-dictionary metadata is decoded with PDFDocEncoding, so keep it ASCII-safe.
+  return `(${escapePdf(sanitizeAscii(value))})`;
 }
 
 function buildPdf(document: CoachingPlanPdfDocument): Buffer {
@@ -278,12 +276,11 @@ function buildPdf(document: CoachingPlanPdfDocument): Buffer {
   const firstContentObjectId = firstPageObjectId + pageCount;
 
   objects[catalogObjectId] = `<< /Type /Catalog /Pages ${pagesObjectId} 0 R >>`;
-  objects[fontObjectIds[pdfTheme.fonts.body]] =
-    `<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>`;
-  objects[fontObjectIds[pdfTheme.fonts.bold]] =
-    `<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>`;
-  objects[fontObjectIds[pdfTheme.fonts.mono]] =
-    `<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>`;
+  const fontDict = (base: string) =>
+    `<< /Type /Font /Subtype /Type1 /BaseFont /${base} /Encoding /WinAnsiEncoding >>`;
+  objects[fontObjectIds[pdfTheme.fonts.body]] = fontDict("Helvetica");
+  objects[fontObjectIds[pdfTheme.fonts.bold]] = fontDict("Helvetica-Bold");
+  objects[fontObjectIds[pdfTheme.fonts.mono]] = fontDict("Courier");
   objects[infoObjectId] =
     `<< /Title ${pdfStringObject(document.title)} /Author ${pdfStringObject(document.author)} /Subject ${pdfStringObject(document.subject)} >>`;
 
@@ -298,7 +295,7 @@ function buildPdf(document: CoachingPlanPdfDocument): Buffer {
     objects[pageObjectId] =
       `<< /Type /Page /Parent ${pagesObjectId} 0 R /MediaBox [0 0 ${pdfTheme.page.width} ${pdfTheme.page.height}] /Resources << /Font << /F1 ${fontObjectIds[pdfTheme.fonts.body]} 0 R /F2 ${fontObjectIds[pdfTheme.fonts.bold]} 0 R /F3 ${fontObjectIds[pdfTheme.fonts.mono]} 0 R >> >> /Contents ${contentObjectId} 0 R >>`;
     objects[contentObjectId] =
-      `<< /Length ${Buffer.byteLength(stream, "utf8")} >>\nstream\n${stream}\nendstream`;
+      `<< /Length ${Buffer.byteLength(stream, "latin1")} >>\nstream\n${stream}\nendstream`;
   });
 
   objects[pagesObjectId] = `<< /Type /Pages /Kids [${kids.join(" ")}] /Count ${pages.length} >>`;
@@ -307,11 +304,11 @@ function buildPdf(document: CoachingPlanPdfDocument): Buffer {
   const offsets = [0];
 
   for (let id = 1; id < objects.length; id += 1) {
-    offsets[id] = Buffer.byteLength(parts.join(""), "utf8");
+    offsets[id] = Buffer.byteLength(parts.join(""), "latin1");
     parts.push(`${id} 0 obj\n${objects[id]}\nendobj\n`);
   }
 
-  const xrefOffset = Buffer.byteLength(parts.join(""), "utf8");
+  const xrefOffset = Buffer.byteLength(parts.join(""), "latin1");
   parts.push(`xref\n0 ${objects.length}\n0000000000 65535 f \n`);
 
   for (let id = 1; id < objects.length; id += 1) {
@@ -322,7 +319,7 @@ function buildPdf(document: CoachingPlanPdfDocument): Buffer {
     `trailer\n<< /Size ${objects.length} /Root ${catalogObjectId} 0 R /Info ${infoObjectId} 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`,
   );
 
-  return Buffer.from(parts.join(""), "utf8");
+  return Buffer.from(parts.join(""), "latin1");
 }
 
 export async function renderCoachingPlanPdf(

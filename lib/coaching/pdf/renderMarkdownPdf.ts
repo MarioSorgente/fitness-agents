@@ -1,6 +1,7 @@
 import { marked, type Token, type Tokens } from "marked";
 
 import { pdfTheme } from "./pdfTheme";
+import { escapePdf, sanitizeAscii, sanitizeWinAnsi } from "./winAnsi";
 
 /**
  * Render a Markdown document to a polished PDF using the project's
@@ -64,39 +65,8 @@ function fontKey(style: SpanStyle): string {
   return "regular";
 }
 
-// ── Text encoding ────────────────────────────────────────────────────────────
-// Standard-14 Helvetica/Courier with WinAnsiEncoding. Map common typographic
-// characters to their WinAnsi bytes; replace symbols we can't show; drop the rest.
-const WINANSI: Record<string, string> = {
-  "—": "\x97",
-  "–": "\x96",
-  "•": "\x95",
-  "“": "\x93",
-  "”": "\x94",
-  "‘": "\x91",
-  "’": "\x92",
-  "…": "\x85",
-  "™": "\x99",
-  "€": "\x80",
-};
-
-function sanitize(text: string): string {
-  let out = text.replace(/[—–•“”‘’…™€]/g, (ch) => WINANSI[ch] ?? ch);
-  out = out
-    .replace(/→/g, "->")
-    .replace(/←/g, "<-")
-    .replace(/≥/g, ">=")
-    .replace(/≤/g, "<=")
-    .replace(/[⚠]️?/g, "(!)")
-    .replace(/[✓✔]/g, "[x]")
-    .replace(/[✕✗✘]/g, "x")
-    .replace(/[○●◦‣·]/g, "-");
-  // Drop anything still outside latin1 (e.g. emoji, combining marks).
-  out = Array.from(out)
-    .map((ch) => ((ch.codePointAt(0) ?? 0) <= 255 ? ch : ""))
-    .join("");
-  return out;
-}
+// Text encoding (sanitizeWinAnsi / sanitizeAscii / escapePdf) is shared via ./winAnsi so this
+// renderer and the structured renderer stay in lockstep.
 
 function decodeEntities(text: string): string {
   return text
@@ -106,10 +76,6 @@ function decodeEntities(text: string): string {
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
     .replace(/&#x27;/gi, "'");
-}
-
-function escapePdf(text: string): string {
-  return text.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
 }
 
 function widthOf(text: string, size: number, mono: boolean): number {
@@ -390,7 +356,7 @@ function drawSpans(chunks: string[], spans: Span[], x: number, y: number, size: 
       chunks.push(`/${font} ${size} Tf`);
       lastFont = font;
     }
-    chunks.push(`(${escapePdf(sanitize(span.text))}) Tj`);
+    chunks.push(`(${escapePdf(sanitizeWinAnsi(span.text))}) Tj`);
   }
   chunks.push("ET");
 }
@@ -451,8 +417,10 @@ function pageStream(page: Line[], pageNumber: number, pageCount: number): string
 }
 
 // ── PDF object assembly ───────────────────────────────────────────────────────
+// Document metadata (Info dict) is decoded with PDFDocEncoding, not the font's WinAnsiEncoding,
+// so reduce it to ASCII to avoid wrong glyphs (e.g. an em-dash showing as "Š") in the title bar.
 function pdfString(value: string): string {
-  return `(${escapePdf(sanitize(value))})`;
+  return `(${escapePdf(sanitizeAscii(value))})`;
 }
 
 function buildPdf(pages: Line[][], meta: Required<PdfMeta>): Buffer {
