@@ -82,11 +82,17 @@ const SAFETY_STATUS_LABEL: Record<string, string> = {
 };
 
 const PAR_Q_FIELDS: Array<[string, string]> = [
-  ["diagnosedHeartConditionAndOnlySupervisedActivity", "Heart condition / supervised activity only"],
+  [
+    "diagnosedHeartConditionAndOnlySupervisedActivity",
+    "Heart condition / supervised activity only",
+  ],
   ["bloodPressureOrHeartMedication", "Blood pressure or heart medication"],
   ["chestPainDuringActivity", "Chest pain during activity"],
   ["dizzinessOrLossOfConsciousnessLast12Months", "Dizziness / loss of consciousness (12 mo)"],
-  ["boneJointSoftTissueProblemAggravatedByActivity", "Bone/joint/soft-tissue problem aggravated by activity"],
+  [
+    "boneJointSoftTissueProblemAggravatedByActivity",
+    "Bone/joint/soft-tissue problem aggravated by activity",
+  ],
   ["chestPainLast30Days", "Chest pain in the last 30 days"],
   ["otherReasonNotToExercise", "Other reason not to exercise"],
   ["currentlyFeelingUnwell", "Currently feeling unwell"],
@@ -199,7 +205,9 @@ export function buildIntakeSummaryMarkdown(intake: CoachingIntake): string {
   });
 
   const medicalHistory = block("Medical history", [
-    ...(medications.length ? ["**Medications:**", ...medications] : [rawFact("Medications", "None reported")]),
+    ...(medications.length
+      ? ["**Medications:**", ...medications]
+      : [rawFact("Medications", "None reported")]),
     rawFact("Allergies", str(input.allergies)),
     ...(conditions.length ? ["**Diagnosed conditions:**", ...conditions] : []),
     rawFact("Other diagnosed conditions", str(input.otherDiagnosedConditions)),
@@ -229,7 +237,11 @@ export function buildIntakeSummaryMarkdown(intake: CoachingIntake): string {
 
   const painInjuries = block("Pain & injuries", [
     ...(painAreas.length ? painAreas : [rawFact("Reported pain areas", "None reported")]),
-    yesNoLine("Limitations aggravated by exercise", input.physicalLimitationsAggravatedByExercise, true),
+    yesNoLine(
+      "Limitations aggravated by exercise",
+      input.physicalLimitationsAggravatedByExercise,
+      true,
+    ),
     rawFact("Movements/positions avoided", str(input.movementsExercisesPositionsAvoided)),
     yesNoLine("Told to avoid activities", input.toldToAvoidActivities, true),
     rawFact("Known diagnoses", str(input.knownDiagnoses)),
@@ -257,12 +269,48 @@ export function buildIntakeSummaryMarkdown(intake: CoachingIntake): string {
     rawFact("Food allergies", str(input.foodAllergies)),
     rawFact("Food intolerances", str(input.foodIntolerances)),
     rawFact("Foods loved", str(input.foodsLoved)),
-    rawFact("Foods avoided/disliked", [str(input.foodsAvoided), str(input.foodsDisliked)].filter(Boolean).join("; ")),
+    rawFact(
+      "Foods avoided/disliked",
+      [str(input.foodsAvoided), str(input.foodsDisliked)].filter(Boolean).join("; "),
+    ),
     fact("Meals per day", input.mealsPerDay),
     fact("Appetite level", humanize(input.appetiteLevel)),
     rawFact("Water intake", str(input.waterIntake)),
     yesNoLine("Recent weight change", input.recentWeightChange),
   ]);
+
+  const foodLogDays = Array.isArray(input.threeDayFoodLog)
+    ? (input.threeDayFoodLog as Dict[])
+        .map((day, index) => {
+          const meals = Array.isArray(day.meals) ? (day.meals as Dict[]) : [];
+          const mealLines = meals
+            .map((meal) => {
+              const item = str(meal.foodItem);
+              if (!item) return null;
+              const notes = Array.isArray(meal.additionalNotes)
+                ? (meal.additionalNotes as unknown[]).map((note) => str(note)).filter(Boolean)
+                : [];
+              const descriptors = [
+                str(meal.brandName),
+                [str(meal.quantity), str(meal.unit)].filter(Boolean).join(" ") || undefined,
+                str(meal.timeOfDay),
+                ...notes,
+              ].filter(Boolean);
+              const mealType = humanize(meal.mealType);
+              const prefix = mealType ? `${mealType}: ` : "";
+              return `  - ${prefix}${item}${descriptors.length ? ` (${descriptors.join(", ")})` : ""}`;
+            })
+            .filter((line): line is string => Boolean(line));
+          if (mealLines.length === 0) return null;
+          const dayNumber = str(day.dayNumber) ?? String(index + 1);
+          const date = str(day.date);
+          const header = `- **Day ${dayNumber}${date ? ` (${date})` : ""}**`;
+          return [header, ...mealLines].join("\n");
+        })
+        .filter((entry): entry is string => Boolean(entry))
+    : [];
+
+  const foodLog = foodLogDays.length ? `### Food log (3-day)\n\n${foodLogDays.join("\n")}` : null;
 
   return [
     profile,
@@ -273,6 +321,7 @@ export function buildIntakeSummaryMarkdown(intake: CoachingIntake): string {
     painInjuries,
     lifestyle,
     nutrition,
+    foodLog,
   ]
     .filter((section): section is string => Boolean(section))
     .join("\n\n");
