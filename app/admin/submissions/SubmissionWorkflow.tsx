@@ -19,6 +19,8 @@ type Phase = "idle" | "generating" | "ready" | "error";
 
 type SaveState = { status: "idle" | "saving" | "saved" | "error"; message?: string };
 type PdfState = { status: "idle" | "working" | "error"; message?: string };
+// "plain" = deterministic dump in flight; "questions" = dump + cheap-model questions in flight.
+type IntakeExportState = { status: "idle" | "plain" | "questions" | "error"; message?: string };
 
 type QualityMode = "production" | "test";
 
@@ -77,6 +79,7 @@ export function SubmissionWorkflow({
   const [genError, setGenError] = useState<string | undefined>(undefined);
   const [save, setSave] = useState<SaveState>({ status: "idle" });
   const [pdf, setPdf] = useState<PdfState>({ status: "idle" });
+  const [intakeExport, setIntakeExport] = useState<IntakeExportState>({ status: "idle" });
   const controllerRef = useRef<AbortController | null>(null);
 
   function setAgent(step: string, patch: Partial<AgentRow>) {
@@ -229,7 +232,10 @@ export function SubmissionWorkflow({
       }
       setSave({ status: "saved" });
     } catch (error) {
-      setSave({ status: "error", message: error instanceof Error ? error.message : "Save failed." });
+      setSave({
+        status: "error",
+        message: error instanceof Error ? error.message : "Save failed.",
+      });
     }
   }
 
@@ -262,6 +268,37 @@ export function SubmissionWorkflow({
   function handleDownloadMarkdown() {
     const blob = new Blob([markdown], { type: "text/markdown;charset=utf-8" });
     triggerDownload(blob, `coaching-document-${planId ?? submissionId}.md`);
+  }
+
+  async function handleIntakeMarkdown(withQuestions: boolean) {
+    if (intakeExport.status === "plain" || intakeExport.status === "questions") return;
+    setIntakeExport({ status: withQuestions ? "questions" : "plain" });
+    try {
+      const response = await fetch("/api/coaching/intake-markdown", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ submissionId, withQuestions }),
+      });
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as {
+          error?: { message?: string };
+        } | null;
+        setIntakeExport({
+          status: "error",
+          message: body?.error?.message ?? "Could not build the intake document.",
+        });
+        return;
+      }
+      const md = await response.text();
+      const blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
+      triggerDownload(blob, `intake-${submissionId}${withQuestions ? "-with-questions" : ""}.md`);
+      setIntakeExport({ status: "idle" });
+    } catch (error) {
+      setIntakeExport({
+        status: "error",
+        message: error instanceof Error ? error.message : "Could not build the intake document.",
+      });
+    }
   }
 
   const generationControls = (
@@ -297,113 +334,151 @@ export function SubmissionWorkflow({
     </div>
   );
 
+  const intakeBusy = intakeExport.status === "plain" || intakeExport.status === "questions";
+
   return (
-    <section className="card stack">
-      <div className="section-heading">
-        <h2>Coaching document</h2>
-        {phase === "ready" ? <span>Draft ready</span> : null}
-      </div>
+    <>
+      <section className="card stack">
+        <div className="section-heading">
+          <h2>Client intake document</h2>
+        </div>
+        <p className="muted-copy">
+          Download everything the client entered as a human-readable Markdown file — useful before
+          you run the agents. Add cheap-model-suggested follow-up questions to prep your first call,
+          or grab the plain dump to paste into any chat model yourself.
+        </p>
+        <div className="button-row">
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => handleIntakeMarkdown(false)}
+            disabled={intakeBusy}
+          >
+            {intakeExport.status === "plain" ? "Preparing…" : "Download intake .md"}
+          </button>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => handleIntakeMarkdown(true)}
+            disabled={intakeBusy}
+          >
+            {intakeExport.status === "questions"
+              ? "Asking model…"
+              : "Download + coach questions .md"}
+          </button>
+          {intakeExport.status === "error" ? (
+            <span className="error-text">{intakeExport.message}</span>
+          ) : null}
+        </div>
+      </section>
 
-      {phase === "idle" ? (
-        <>
-          <p className="muted-copy">
-            Run the coaching agents on this intake to draft an editable Markdown document (client
-            summary + plan). Choose a program length and quality, then generate. You can edit it
-            before exporting a PDF.
-          </p>
-          {generationControls}
-          <div className="button-row">
-            <button type="button" onClick={generate}>
-              Generate draft
-            </button>
-          </div>
-        </>
-      ) : null}
+      <section className="card stack">
+        <div className="section-heading">
+          <h2>Coaching document</h2>
+          {phase === "ready" ? <span>Draft ready</span> : null}
+        </div>
 
-      {phase === "generating" ? (
-        <>
-          <p className="muted-copy">The coaching panel is reviewing this intake…</p>
-          <ul className="agent-timeline" aria-live="polite">
-            {agents.map((row) => (
-              <li key={row.step} data-status={row.status}>
-                <span style={{ color: statusColor(row.status), fontWeight: 700 }}>
-                  {statusIcon(row.status)}
-                </span>
-                <span>{row.title}</span>
-                <small style={{ color: statusColor(row.status) }}>
-                  {row.status === "done"
-                    ? `Done${row.provider ? ` · ${row.provider}` : ""}`
-                    : row.status === "failed"
-                      ? `Failed${row.error ? `: ${row.error}` : ""}`
-                      : row.status === "running"
-                        ? "Thinking…"
-                        : "Waiting…"}
-                </small>
-              </li>
-            ))}
-          </ul>
-        </>
-      ) : null}
-
-      {phase === "error" ? (
-        <>
-          <p className="error-text">{genError ?? "Generation failed."}</p>
-          <div className="button-row">
-            <button type="button" onClick={generate}>
-              Try again
-            </button>
-          </div>
-        </>
-      ) : null}
-
-      {phase === "ready" ? (
-        <>
-          {genError ? <p className="error-text">{genError}</p> : null}
-          {generationControls}
-          <div className="md-toolbar">
-            <button type="button" onClick={handleSave} disabled={save.status === "saving"}>
-              {save.status === "saving" ? "Saving…" : "Save changes"}
-            </button>
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={handlePdf}
-              disabled={pdf.status === "working"}
-            >
-              {pdf.status === "working" ? "Preparing PDF…" : "Generate PDF"}
-            </button>
-            <button type="button" className="secondary-button" onClick={handleDownloadMarkdown}>
-              Download .md
-            </button>
-            <button type="button" className="text-button" onClick={generate}>
-              Regenerate
-            </button>
-            {save.status === "saved" ? <span className="save-ok">Saved ✓</span> : null}
-            {save.status === "error" ? <span className="error-text">{save.message}</span> : null}
-            {pdf.status === "error" ? <span className="error-text">{pdf.message}</span> : null}
-          </div>
-
-          <div className="md-workbench">
-            <label className="md-editor-label">
-              Markdown
-              <textarea
-                className="md-editor"
-                value={markdown}
-                onChange={(event) => {
-                  setMarkdown(event.target.value);
-                  if (save.status !== "idle") setSave({ status: "idle" });
-                }}
-                spellCheck
-              />
-            </label>
-            <div className="md-preview-pane">
-              <span className="md-preview-label">Preview</span>
-              <MarkdownPreview markdown={markdown} />
+        {phase === "idle" ? (
+          <>
+            <p className="muted-copy">
+              Run the coaching agents on this intake to draft an editable Markdown document (client
+              summary + plan). Choose a program length and quality, then generate. You can edit it
+              before exporting a PDF.
+            </p>
+            {generationControls}
+            <div className="button-row">
+              <button type="button" onClick={generate}>
+                Generate draft
+              </button>
             </div>
-          </div>
-        </>
-      ) : null}
-    </section>
+          </>
+        ) : null}
+
+        {phase === "generating" ? (
+          <>
+            <p className="muted-copy">The coaching panel is reviewing this intake…</p>
+            <ul className="agent-timeline" aria-live="polite">
+              {agents.map((row) => (
+                <li key={row.step} data-status={row.status}>
+                  <span style={{ color: statusColor(row.status), fontWeight: 700 }}>
+                    {statusIcon(row.status)}
+                  </span>
+                  <span>{row.title}</span>
+                  <small style={{ color: statusColor(row.status) }}>
+                    {row.status === "done"
+                      ? `Done${row.provider ? ` · ${row.provider}` : ""}`
+                      : row.status === "failed"
+                        ? `Failed${row.error ? `: ${row.error}` : ""}`
+                        : row.status === "running"
+                          ? "Thinking…"
+                          : "Waiting…"}
+                  </small>
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : null}
+
+        {phase === "error" ? (
+          <>
+            <p className="error-text">{genError ?? "Generation failed."}</p>
+            <div className="button-row">
+              <button type="button" onClick={generate}>
+                Try again
+              </button>
+            </div>
+          </>
+        ) : null}
+
+        {phase === "ready" ? (
+          <>
+            {genError ? <p className="error-text">{genError}</p> : null}
+            {generationControls}
+            <div className="md-toolbar">
+              <button type="button" onClick={handleSave} disabled={save.status === "saving"}>
+                {save.status === "saving" ? "Saving…" : "Save changes"}
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={handlePdf}
+                disabled={pdf.status === "working"}
+              >
+                {pdf.status === "working" ? "Preparing PDF…" : "Generate PDF"}
+              </button>
+              <button type="button" className="secondary-button" onClick={handleDownloadMarkdown}>
+                Download .md
+              </button>
+              <button type="button" className="text-button" onClick={generate}>
+                Regenerate
+              </button>
+              {save.status === "saved" ? <span className="save-ok">Saved ✓</span> : null}
+              {save.status === "error" ? <span className="error-text">{save.message}</span> : null}
+              {pdf.status === "error" ? <span className="error-text">{pdf.message}</span> : null}
+            </div>
+
+            <div className="md-workbench">
+              <label className="md-editor-label">
+                Markdown
+                <textarea
+                  className="md-editor"
+                  value={markdown}
+                  onChange={(event) => {
+                    setMarkdown(event.target.value);
+                    if (save.status !== "idle") setSave({ status: "idle" });
+                  }}
+                  spellCheck
+                />
+              </label>
+              <div className="md-preview-pane">
+                <span className="md-preview-label">Preview</span>
+                <MarkdownPreview markdown={markdown} />
+              </div>
+            </div>
+          </>
+        ) : null}
+      </section>
+    </>
   );
 }
 

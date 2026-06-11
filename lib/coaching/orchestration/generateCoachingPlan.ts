@@ -1,6 +1,4 @@
-import { createAnthropicProvider } from "../ai/anthropicProvider";
-import { createKimiProvider } from "../ai/kimiProvider";
-import { createOpenAiProvider } from "../ai/openaiProvider";
+import { createDefaultProviderRegistry } from "../ai/registry";
 import {
   type CoachingAiCompletion,
   type CoachingAiProviderRegistry,
@@ -101,14 +99,6 @@ type StepRun = {
   model: string;
 };
 
-function createDefaultProviderRegistry(): CoachingAiProviderRegistry {
-  return {
-    anthropic: createAnthropicProvider(),
-    kimi: createKimiProvider(),
-    openai: createOpenAiProvider(),
-  };
-}
-
 function safeJsonParse(content: string): JsonValue | null {
   const fencedMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/i);
   const candidate = (fencedMatch?.[1] ?? content).trim();
@@ -196,7 +186,9 @@ function routingMetadata(mode: CoachingOrchestrationMode): JsonObject {
       "panel_brief",
     ],
     cheapAndHeavyRoutes: getRoutesForStep("mobility_coach", mode).map((route) => ({ ...route })),
-    finalWriterRoutes: getRoutesForStep("training_plan_writer", mode).map((route) => ({ ...route })),
+    finalWriterRoutes: getRoutesForStep("training_plan_writer", mode).map((route) => ({
+      ...route,
+    })),
   };
 }
 
