@@ -24,6 +24,14 @@ export type CoachingPlan = CoachingPlanRecord;
 export type ClientProfileStatus = "lead" | "active" | "paused" | "completed" | "archived";
 export type ClientProfilePriority = "low" | "normal" | "high" | "urgent";
 
+export type ClientAsset = {
+  id: string;
+  url: string;
+  storagePath: string;
+  label: string;
+  uploadedAt: Date;
+};
+
 export type ClientProfile = {
   id: string;
   userId: string;
@@ -40,6 +48,8 @@ export type ClientProfile = {
   priority: ClientProfilePriority;
   planImageUrls: string[];
   progressPhotoUrls: string[];
+  planImages: ClientAsset[];
+  progressPhotos: ClientAsset[];
   currentPlanPhase?: string;
   measurementsSummary?: string;
   createdAt: Date;
@@ -99,6 +109,8 @@ export type CreateClientProfileInput = {
   priority?: ClientProfilePriority;
   planImageUrls?: string[];
   progressPhotoUrls?: string[];
+  planImages?: ClientAsset[];
+  progressPhotos?: ClientAsset[];
   currentPlanPhase?: string;
   measurementsSummary?: string;
 };
@@ -118,6 +130,8 @@ export type UpdateClientProfileInput = Partial<
     | "priority"
     | "planImageUrls"
     | "progressPhotoUrls"
+    | "planImages"
+    | "progressPhotos"
     | "currentPlanPhase"
     | "measurementsSummary"
   >

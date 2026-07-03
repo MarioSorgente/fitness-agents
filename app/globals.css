@@ -790,3 +790,54 @@ button:disabled {
   color: #15803d !important;
   font-weight: 700;
 }
+
+.upload-dropzone {
+  align-items: center;
+  border: 2px dashed var(--border-color, #cbd5e1);
+  border-radius: 16px;
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+  min-height: 140px;
+  padding: 1.5rem;
+  text-align: center;
+}
+
+.upload-dropzone input,
+.replace-upload input {
+  display: none;
+}
+
+.asset-gallery {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.asset-card {
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.asset-card img {
+  aspect-ratio: 4 / 3;
+  display: block;
+  height: auto;
+  object-fit: cover;
+  width: 100%;
+}
+
+.asset-card > div {
+  padding: 1rem;
+}
+
+.compact-stack {
+  gap: 0.5rem;
+}
+
+.danger-button {
+  background: #fee2e2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+}

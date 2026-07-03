@@ -99,6 +99,17 @@ function hydrateIntakeSubmission(submission: Serialized): IntakeSubmission {
   } as IntakeSubmission;
 }
 
+function hydrateClientAsset(asset: unknown): import("./coachingRepository").ClientAsset {
+  const value = asset && typeof asset === "object" ? (asset as Record<string, unknown>) : {};
+  return {
+    id: String(value.id ?? ""),
+    url: String(value.url ?? ""),
+    storagePath: String(value.storagePath ?? ""),
+    label: String(value.label ?? "Client image"),
+    uploadedAt: dateFrom(value.uploadedAt) ?? new Date(0),
+  };
+}
+
 function serializeClientProfile(profile: ClientProfile): Serialized {
   return {
     ...profile,
@@ -115,6 +126,10 @@ function hydrateClientProfile(profile: Serialized): ClientProfile {
     internalTags: Array.isArray(profile.internalTags) ? profile.internalTags : [],
     planImageUrls: Array.isArray(profile.planImageUrls) ? profile.planImageUrls : [],
     progressPhotoUrls: Array.isArray(profile.progressPhotoUrls) ? profile.progressPhotoUrls : [],
+    planImages: Array.isArray(profile.planImages) ? profile.planImages.map(hydrateClientAsset) : [],
+    progressPhotos: Array.isArray(profile.progressPhotos)
+      ? profile.progressPhotos.map(hydrateClientAsset)
+      : [],
     createdAt: dateFrom(profile.createdAt) ?? new Date(0),
     updatedAt: dateFrom(profile.updatedAt) ?? new Date(0),
     startDate: dateFrom(profile.startDate),
@@ -275,6 +290,8 @@ export class LocalFileCoachingRepository implements CoachingRepository {
         priority: input.priority ?? "normal",
         planImageUrls: input.planImageUrls ?? [],
         progressPhotoUrls: input.progressPhotoUrls ?? [],
+        planImages: input.planImages ?? [],
+        progressPhotos: input.progressPhotos ?? [],
         ...withOptional("currentPlanPhase", input.currentPlanPhase),
         ...withOptional("measurementsSummary", input.measurementsSummary),
         createdAt: now,

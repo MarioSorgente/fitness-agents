@@ -73,6 +73,17 @@ function stripUndefined<T extends Record<string, unknown>>(value: T): Partial<T>
   ) as Partial<T>;
 }
 
+function hydrateClientAsset(asset: unknown): import("./coachingRepository").ClientAsset {
+  const value = asset && typeof asset === "object" ? (asset as Record<string, unknown>) : {};
+  return {
+    id: String(value.id ?? ""),
+    url: String(value.url ?? ""),
+    storagePath: String(value.storagePath ?? ""),
+    label: String(value.label ?? "Client image"),
+    uploadedAt: toDate(value.uploadedAt as FirestoreDate | undefined) ?? new Date(0),
+  };
+}
+
 function mapIntakeSubmission(data: StoredIntakeSubmission): IntakeSubmission {
   return {
     ...data,
@@ -88,6 +99,10 @@ function mapClientProfile(data: StoredClientProfile): ClientProfile {
     internalTags: data.internalTags ?? [],
     planImageUrls: data.planImageUrls ?? [],
     progressPhotoUrls: data.progressPhotoUrls ?? [],
+    planImages: Array.isArray(data.planImages) ? data.planImages.map(hydrateClientAsset) : [],
+    progressPhotos: Array.isArray(data.progressPhotos)
+      ? data.progressPhotos.map(hydrateClientAsset)
+      : [],
     createdAt: toDate(data.createdAt) ?? new Date(0),
     updatedAt: toDate(data.updatedAt) ?? new Date(0),
     startDate: toDate(data.startDate),
@@ -212,6 +227,8 @@ export class FirebaseCoachingRepository implements CoachingRepository {
       priority: input.priority ?? "normal",
       planImageUrls: input.planImageUrls ?? [],
       progressPhotoUrls: input.progressPhotoUrls ?? [],
+      planImages: input.planImages ?? [],
+      progressPhotos: input.progressPhotos ?? [],
       currentPlanPhase: input.currentPlanPhase,
       measurementsSummary: input.measurementsSummary,
       createdAt: now,
