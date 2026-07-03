@@ -52,6 +52,25 @@ export type ClientProfile = {
   progressPhotos: ClientAsset[];
   currentPlanPhase?: string;
   measurementsSummary?: string;
+  currentWeight?: string;
+  targetWeight?: string;
+  height?: string;
+  measurementNotes?: string;
+  trainingDaysPerWeek?: number;
+  preferredTrainingDays: string[];
+  sessionLengthMinutes?: string;
+  nutritionFocus?: string;
+  sleepFocus?: string;
+  stressLevel?: string;
+  injuryFlags?: string;
+  medicationFlags?: string;
+  motivationStyle?: string;
+  accountabilityPreference?: string;
+  lastCheckInDate?: Date;
+  nextCheckInDate?: Date;
+  lastPlanUpdateDate?: Date;
+  renewalDate?: Date;
+  paymentStatus?: string;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -113,6 +132,25 @@ export type CreateClientProfileInput = {
   progressPhotos?: ClientAsset[];
   currentPlanPhase?: string;
   measurementsSummary?: string;
+  currentWeight?: string;
+  targetWeight?: string;
+  height?: string;
+  measurementNotes?: string;
+  trainingDaysPerWeek?: number;
+  preferredTrainingDays?: string[];
+  sessionLengthMinutes?: string;
+  nutritionFocus?: string;
+  sleepFocus?: string;
+  stressLevel?: string;
+  injuryFlags?: string;
+  medicationFlags?: string;
+  motivationStyle?: string;
+  accountabilityPreference?: string;
+  lastCheckInDate?: Date;
+  nextCheckInDate?: Date;
+  lastPlanUpdateDate?: Date;
+  renewalDate?: Date;
+  paymentStatus?: string;
 };
 
 export type UpdateClientProfileInput = Partial<
@@ -134,6 +172,25 @@ export type UpdateClientProfileInput = Partial<
     | "progressPhotos"
     | "currentPlanPhase"
     | "measurementsSummary"
+    | "currentWeight"
+    | "targetWeight"
+    | "height"
+    | "measurementNotes"
+    | "trainingDaysPerWeek"
+    | "preferredTrainingDays"
+    | "sessionLengthMinutes"
+    | "nutritionFocus"
+    | "sleepFocus"
+    | "stressLevel"
+    | "injuryFlags"
+    | "medicationFlags"
+    | "motivationStyle"
+    | "accountabilityPreference"
+    | "lastCheckInDate"
+    | "nextCheckInDate"
+    | "lastPlanUpdateDate"
+    | "renewalDate"
+    | "paymentStatus"
   >
 >;
 

@@ -38,8 +38,22 @@ type StoredIntakeSubmission = StoredDocument &
   };
 
 type StoredClientProfile = StoredDocument &
-  Omit<ClientProfile, "createdAt" | "nextFollowUpDate" | "startDate" | "updatedAt"> & {
+  Omit<
+    ClientProfile,
+    | "createdAt"
+    | "lastCheckInDate"
+    | "lastPlanUpdateDate"
+    | "nextCheckInDate"
+    | "nextFollowUpDate"
+    | "renewalDate"
+    | "startDate"
+    | "updatedAt"
+  > & {
+    lastCheckInDate?: FirestoreDate;
+    lastPlanUpdateDate?: FirestoreDate;
+    nextCheckInDate?: FirestoreDate;
     nextFollowUpDate?: FirestoreDate;
+    renewalDate?: FirestoreDate;
     startDate?: FirestoreDate;
   };
 
@@ -107,7 +121,12 @@ function mapClientProfile(data: StoredClientProfile): ClientProfile {
     updatedAt: toDate(data.updatedAt) ?? new Date(0),
     startDate: toDate(data.startDate),
     nextFollowUpDate: toDate(data.nextFollowUpDate),
-  };
+    preferredTrainingDays: data.preferredTrainingDays ?? [],
+    lastCheckInDate: toDate(data.lastCheckInDate),
+    nextCheckInDate: toDate(data.nextCheckInDate),
+    lastPlanUpdateDate: toDate(data.lastPlanUpdateDate),
+    renewalDate: toDate(data.renewalDate),
+  } as ClientProfile;
 }
 
 function mapCoachingPlan(data: StoredCoachingPlan): CoachingPlan {
@@ -231,6 +250,25 @@ export class FirebaseCoachingRepository implements CoachingRepository {
       progressPhotos: input.progressPhotos ?? [],
       currentPlanPhase: input.currentPlanPhase,
       measurementsSummary: input.measurementsSummary,
+      currentWeight: input.currentWeight,
+      targetWeight: input.targetWeight,
+      height: input.height,
+      measurementNotes: input.measurementNotes,
+      trainingDaysPerWeek: input.trainingDaysPerWeek,
+      preferredTrainingDays: input.preferredTrainingDays ?? [],
+      sessionLengthMinutes: input.sessionLengthMinutes,
+      nutritionFocus: input.nutritionFocus,
+      sleepFocus: input.sleepFocus,
+      stressLevel: input.stressLevel,
+      injuryFlags: input.injuryFlags,
+      medicationFlags: input.medicationFlags,
+      motivationStyle: input.motivationStyle,
+      accountabilityPreference: input.accountabilityPreference,
+      lastCheckInDate: toFirestoreDate(input.lastCheckInDate),
+      nextCheckInDate: toFirestoreDate(input.nextCheckInDate),
+      lastPlanUpdateDate: toFirestoreDate(input.lastPlanUpdateDate),
+      renewalDate: toFirestoreDate(input.renewalDate),
+      paymentStatus: input.paymentStatus,
       createdAt: now,
       updatedAt: now,
     });
@@ -278,6 +316,10 @@ export class FirebaseCoachingRepository implements CoachingRepository {
         ...updates,
         startDate: toFirestoreDate(updates.startDate),
         nextFollowUpDate: toFirestoreDate(updates.nextFollowUpDate),
+        lastCheckInDate: toFirestoreDate(updates.lastCheckInDate),
+        nextCheckInDate: toFirestoreDate(updates.nextCheckInDate),
+        lastPlanUpdateDate: toFirestoreDate(updates.lastPlanUpdateDate),
+        renewalDate: toFirestoreDate(updates.renewalDate),
         updatedAt: new Date(),
       }),
     );
