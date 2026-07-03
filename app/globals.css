@@ -841,3 +841,30 @@ button:disabled {
   border: 1px solid #fecaca;
   color: #991b1b;
 }
+
+.crm-row-overdue {
+  background: #fff7ed;
+}
+
+.crm-row-caution {
+  box-shadow: inset 4px 0 0 #f97316;
+}
+
+.status-pill {
+  border-radius: 999px;
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  margin-left: 0.5rem;
+  padding: 0.15rem 0.5rem;
+}
+
+.status-pill.danger {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.status-pill.warning {
+  background: #ffedd5;
+  color: #9a3412;
+}

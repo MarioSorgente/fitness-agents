@@ -23,6 +23,13 @@ function optionalString(formData: FormData, key: string): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
+function optionalNumber(formData: FormData, key: string): number | undefined {
+  const value = optionalString(formData, key);
+  if (!value) return undefined;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : undefined;
+}
+
 function optionalDate(formData: FormData, key: string): Date | undefined {
   const value = optionalString(formData, key);
   return value ? new Date(`${value}T00:00:00.000Z`) : undefined;
@@ -58,6 +65,28 @@ export async function updateClientCrmProfile(
       priority: priority as ClientProfilePriority,
       currentPlanPhase: optionalString(formData, "currentPlanPhase"),
       measurementsSummary: optionalString(formData, "measurementsSummary"),
+      currentWeight: optionalString(formData, "currentWeight"),
+      targetWeight: optionalString(formData, "targetWeight"),
+      height: optionalString(formData, "height"),
+      measurementNotes: optionalString(formData, "measurementNotes"),
+      trainingDaysPerWeek: optionalNumber(formData, "trainingDaysPerWeek"),
+      preferredTrainingDays: (optionalString(formData, "preferredTrainingDays") ?? "")
+        .split(",")
+        .map((day) => day.trim())
+        .filter(Boolean),
+      sessionLengthMinutes: optionalString(formData, "sessionLengthMinutes"),
+      nutritionFocus: optionalString(formData, "nutritionFocus"),
+      sleepFocus: optionalString(formData, "sleepFocus"),
+      stressLevel: optionalString(formData, "stressLevel"),
+      injuryFlags: optionalString(formData, "injuryFlags"),
+      medicationFlags: optionalString(formData, "medicationFlags"),
+      motivationStyle: optionalString(formData, "motivationStyle"),
+      accountabilityPreference: optionalString(formData, "accountabilityPreference"),
+      lastCheckInDate: optionalDate(formData, "lastCheckInDate"),
+      nextCheckInDate: optionalDate(formData, "nextCheckInDate"),
+      lastPlanUpdateDate: optionalDate(formData, "lastPlanUpdateDate"),
+      renewalDate: optionalDate(formData, "renewalDate"),
+      paymentStatus: optionalString(formData, "paymentStatus"),
     };
 
     await createCoachingRepository().updateClientProfile(profileId, updates);

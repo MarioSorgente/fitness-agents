@@ -69,6 +69,10 @@ function formatDate(date: Date | undefined): string {
   }
 }
 
+function followUpDate(profile: ClientProfile): Date | undefined {
+  return profile.nextFollowUpDate ?? profile.nextCheckInDate;
+}
+
 function isDue(date: Date | undefined, now = new Date()): boolean {
   if (!date) return false;
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
@@ -94,9 +98,13 @@ function safetyFromProfile(
 function filterClients(rows: ClientRow[], filter: ClientFilter): ClientRow[] {
   return rows.filter(({ profile, safetyStatus }) => {
     if (filter === "active") return profile.status !== "archived";
-    if (filter === "follow-up-due") return isDue(profile.nextFollowUpDate);
+    if (filter === "follow-up-due") return isDue(followUpDate(profile));
     if (filter === "safety") {
-      return safetyStatus === "caution" || safetyStatus === "medical_clearance_recommended";
+      return (
+        safetyStatus === "caution" ||
+        safetyStatus === "medical_clearance_recommended" ||
+        Boolean(profile.injuryFlags || profile.medicationFlags)
+      );
     }
     return profile.status === "archived";
   });
@@ -199,26 +207,50 @@ export default async function AdminClientsPage({ searchParams }: AdminClientsPag
                 </tr>
               </thead>
               <tbody>
-                {visibleRows.map(({ profile, submission, primaryGoal, safetyStatus }) => (
-                  <tr key={profile.id}>
-                    <td>{profile.fullName || "Unnamed client"}</td>
-                    <td>
-                      <div>{profile.email || field(submission, "email") || "—"}</div>
-                      <div className="muted-copy">
-                        {profile.phone || field(submission, "phoneNumber") || "—"}
-                      </div>
-                    </td>
-                    <td>{humanize(primaryGoal)}</td>
-                    <td>{humanize(profile.status)}</td>
-                    <td>{formatDate(profile.startDate)}</td>
-                    <td>{formatDate(profile.nextFollowUpDate)}</td>
-                    <td>{safetyLabel(safetyStatus)}</td>
-                    <td>{formatDate(profile.updatedAt)}</td>
-                    <td>
-                      <Link href={`/admin/clients/${profile.id}`}>Open client</Link>
-                    </td>
-                  </tr>
-                ))}
+                {visibleRows.map(({ profile, submission, primaryGoal, safetyStatus }) => {
+                  const followUpDue = isDue(followUpDate(profile));
+                  const hasSafetyCaution =
+                    safetyStatus === "caution" ||
+                    safetyStatus === "medical_clearance_recommended" ||
+                    Boolean(profile.injuryFlags || profile.medicationFlags);
+
+                  return (
+                    <tr
+                      key={profile.id}
+                      className={[
+                        followUpDue ? "crm-row-overdue" : "",
+                        hasSafetyCaution ? "crm-row-caution" : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                    >
+                      <td>{profile.fullName || "Unnamed client"}</td>
+                      <td>
+                        <div>{profile.email || field(submission, "email") || "—"}</div>
+                        <div className="muted-copy">
+                          {profile.phone || field(submission, "phoneNumber") || "—"}
+                        </div>
+                      </td>
+                      <td>{humanize(primaryGoal)}</td>
+                      <td>{humanize(profile.status)}</td>
+                      <td>{formatDate(profile.startDate)}</td>
+                      <td>
+                        {formatDate(followUpDate(profile))}
+                        {followUpDue ? <span className="status-pill danger">Overdue</span> : null}
+                      </td>
+                      <td>
+                        {safetyLabel(safetyStatus)}
+                        {hasSafetyCaution ? (
+                          <span className="status-pill warning">Caution</span>
+                        ) : null}
+                      </td>
+                      <td>{formatDate(profile.updatedAt)}</td>
+                      <td>
+                        <Link href={`/admin/clients/${profile.id}`}>Open client</Link>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

@@ -85,6 +85,121 @@ export function ClientCrmForm({ profile }: ClientCrmFormProps) {
               placeholder="Comma-separated tags"
             />
           </label>
+
+          <label>
+            Current weight
+            <input name="currentWeight" defaultValue={profile.currentWeight ?? ""} />
+          </label>
+          <label>
+            Target weight
+            <input name="targetWeight" defaultValue={profile.targetWeight ?? ""} />
+          </label>
+          <label>
+            Height
+            <input name="height" defaultValue={profile.height ?? ""} />
+          </label>
+          <label>
+            Training days per week
+            <input
+              name="trainingDaysPerWeek"
+              type="number"
+              min="1"
+              max="7"
+              defaultValue={profile.trainingDaysPerWeek ?? ""}
+            />
+          </label>
+          <label>
+            Preferred training days
+            <input
+              name="preferredTrainingDays"
+              defaultValue={(profile.preferredTrainingDays ?? []).join(", ")}
+              placeholder="Monday, Wednesday, Friday"
+            />
+          </label>
+          <label>
+            Session length minutes
+            <input name="sessionLengthMinutes" defaultValue={profile.sessionLengthMinutes ?? ""} />
+          </label>
+          <label>
+            Last check-in date
+            <input
+              name="lastCheckInDate"
+              type="date"
+              defaultValue={dateValue(profile.lastCheckInDate)}
+            />
+          </label>
+          <label>
+            Next check-in date
+            <input
+              name="nextCheckInDate"
+              type="date"
+              defaultValue={dateValue(profile.nextCheckInDate)}
+            />
+          </label>
+          <label>
+            Last plan update date
+            <input
+              name="lastPlanUpdateDate"
+              type="date"
+              defaultValue={dateValue(profile.lastPlanUpdateDate)}
+            />
+          </label>
+          <label>
+            Renewal date
+            <input name="renewalDate" type="date" defaultValue={dateValue(profile.renewalDate)} />
+          </label>
+          <label>
+            Payment status
+            <input name="paymentStatus" defaultValue={profile.paymentStatus ?? ""} />
+          </label>
+          <label>
+            Nutrition focus
+            <textarea name="nutritionFocus" defaultValue={profile.nutritionFocus ?? ""} rows={3} />
+          </label>
+          <label>
+            Sleep focus
+            <textarea name="sleepFocus" defaultValue={profile.sleepFocus ?? ""} rows={3} />
+          </label>
+          <label>
+            Stress level
+            <textarea name="stressLevel" defaultValue={profile.stressLevel ?? ""} rows={3} />
+          </label>
+          <label>
+            Injury flags
+            <textarea name="injuryFlags" defaultValue={profile.injuryFlags ?? ""} rows={4} />
+          </label>
+          <label>
+            Medication flags
+            <textarea
+              name="medicationFlags"
+              defaultValue={profile.medicationFlags ?? ""}
+              rows={4}
+            />
+          </label>
+          <label>
+            Motivation style
+            <textarea
+              name="motivationStyle"
+              defaultValue={profile.motivationStyle ?? ""}
+              rows={3}
+            />
+          </label>
+          <label>
+            Accountability preference
+            <textarea
+              name="accountabilityPreference"
+              defaultValue={profile.accountabilityPreference ?? ""}
+              rows={3}
+            />
+          </label>
+          <label>
+            Measurement notes
+            <textarea
+              name="measurementNotes"
+              defaultValue={profile.measurementNotes ?? ""}
+              rows={4}
+            />
+          </label>
           <label>
             Measurements summary
             <textarea

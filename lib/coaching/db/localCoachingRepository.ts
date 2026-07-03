@@ -117,6 +117,10 @@ function serializeClientProfile(profile: ClientProfile): Serialized {
     updatedAt: profile.updatedAt.toISOString(),
     ...withOptional("startDate", serializeDate(profile.startDate)),
     ...withOptional("nextFollowUpDate", serializeDate(profile.nextFollowUpDate)),
+    ...withOptional("lastCheckInDate", serializeDate(profile.lastCheckInDate)),
+    ...withOptional("nextCheckInDate", serializeDate(profile.nextCheckInDate)),
+    ...withOptional("lastPlanUpdateDate", serializeDate(profile.lastPlanUpdateDate)),
+    ...withOptional("renewalDate", serializeDate(profile.renewalDate)),
   };
 }
 
@@ -134,6 +138,13 @@ function hydrateClientProfile(profile: Serialized): ClientProfile {
     updatedAt: dateFrom(profile.updatedAt) ?? new Date(0),
     startDate: dateFrom(profile.startDate),
     nextFollowUpDate: dateFrom(profile.nextFollowUpDate),
+    preferredTrainingDays: Array.isArray(profile.preferredTrainingDays)
+      ? profile.preferredTrainingDays
+      : [],
+    lastCheckInDate: dateFrom(profile.lastCheckInDate),
+    nextCheckInDate: dateFrom(profile.nextCheckInDate),
+    lastPlanUpdateDate: dateFrom(profile.lastPlanUpdateDate),
+    renewalDate: dateFrom(profile.renewalDate),
   } as ClientProfile;
 }
 
@@ -274,29 +285,48 @@ export class LocalFileCoachingRepository implements CoachingRepository {
         return existing;
       }
 
-      const profile: ClientProfile = {
+      const profile = {
         id: input.id ?? randomUUID(),
         userId: input.userId,
         intakeSubmissionId: input.intakeSubmissionId,
         fullName: input.fullName,
         email: input.email,
-        ...withOptional("phone", input.phone),
+        phone: input.phone,
         status: input.status ?? "lead",
-        ...withOptional("startDate", input.startDate),
-        ...withOptional("nextFollowUpDate", input.nextFollowUpDate),
-        ...withOptional("checkInCadence", input.checkInCadence),
-        ...withOptional("coachNotes", input.coachNotes),
+        startDate: input.startDate,
+        nextFollowUpDate: input.nextFollowUpDate,
+        checkInCadence: input.checkInCadence,
+        coachNotes: input.coachNotes,
         internalTags: input.internalTags ?? [],
         priority: input.priority ?? "normal",
         planImageUrls: input.planImageUrls ?? [],
         progressPhotoUrls: input.progressPhotoUrls ?? [],
         planImages: input.planImages ?? [],
         progressPhotos: input.progressPhotos ?? [],
-        ...withOptional("currentPlanPhase", input.currentPlanPhase),
-        ...withOptional("measurementsSummary", input.measurementsSummary),
+        currentPlanPhase: input.currentPlanPhase,
+        measurementsSummary: input.measurementsSummary,
+        currentWeight: input.currentWeight,
+        targetWeight: input.targetWeight,
+        height: input.height,
+        measurementNotes: input.measurementNotes,
+        trainingDaysPerWeek: input.trainingDaysPerWeek,
+        preferredTrainingDays: input.preferredTrainingDays ?? [],
+        sessionLengthMinutes: input.sessionLengthMinutes,
+        nutritionFocus: input.nutritionFocus,
+        sleepFocus: input.sleepFocus,
+        stressLevel: input.stressLevel,
+        injuryFlags: input.injuryFlags,
+        medicationFlags: input.medicationFlags,
+        motivationStyle: input.motivationStyle,
+        accountabilityPreference: input.accountabilityPreference,
+        lastCheckInDate: input.lastCheckInDate,
+        nextCheckInDate: input.nextCheckInDate,
+        lastPlanUpdateDate: input.lastPlanUpdateDate,
+        renewalDate: input.renewalDate,
+        paymentStatus: input.paymentStatus,
         createdAt: now,
         updatedAt: now,
-      };
+      } as ClientProfile;
 
       store.clientProfiles[profile.id] = serializeClientProfile(profile);
       return profile;

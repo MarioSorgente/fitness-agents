@@ -30,6 +30,40 @@ function extractString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
+function extractNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function joinStrings(value: unknown): string | undefined {
+  return Array.isArray(value)
+    ? value
+        .filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+        .join(", ") || undefined
+    : extractString(value);
+}
+
+function yesExplanation(value: unknown): string | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const record = value as { answer?: unknown; explanation?: unknown };
+  if (record.answer !== "yes") return undefined;
+  return extractString(record.explanation) ?? "Yes";
+}
+
+function summarizeMedications(value: unknown): string | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const entries = value
+    .map((entry) => {
+      if (!entry || typeof entry !== "object") return undefined;
+      const med = entry as Record<string, unknown>;
+      return [med.medicationName, med.dosage, med.frequency, med.conditionOrReason]
+        .map(extractString)
+        .filter(Boolean)
+        .join(" · ");
+    })
+    .filter((entry): entry is string => Boolean(entry));
+  return entries.join("; ") || undefined;
+}
+
 function withContext(error: unknown, message: string): Error {
   const wrapped = new Error(
     `${message}: ${error instanceof Error ? error.message : "unknown error"}`,
@@ -85,6 +119,52 @@ export async function POST(request: Request) {
         status: "lead",
         priority:
           input.payload.safetyStatus === "medical_clearance_recommended" ? "high" : "normal",
+        currentWeight: extractString(input.payload.weight),
+        height: extractString(input.payload.height),
+        measurementNotes:
+          [
+            extractString(input.payload.weightFluctuation?.explanation),
+            extractString(input.payload.recentWeightChangeAmount),
+            extractString(input.payload.recentWeightChangeTimeframe),
+          ]
+            .filter(Boolean)
+            .join("; ") || undefined,
+        trainingDaysPerWeek: extractNumber(input.payload.availableDaysPerWeek),
+        preferredTrainingDays: input.payload.preferredTrainingDays,
+        sessionLengthMinutes: String(input.payload.sessionDurationMinutes),
+        nutritionFocus:
+          [
+            extractString(input.payload.currentNutritionBehavior),
+            extractString(input.payload.dietaryRestrictions),
+          ]
+            .filter(Boolean)
+            .join("; ") || undefined,
+        sleepFocus:
+          [extractString(input.payload.sleepHours), extractString(input.payload.sleepQuality)]
+            .filter(Boolean)
+            .join("; ") || undefined,
+        stressLevel:
+          [extractString(input.payload.stressWork), extractString(input.payload.stressHome)]
+            .filter(Boolean)
+            .join("; ") || undefined,
+        injuryFlags:
+          [
+            extractString(input.payload.exercisesThatCausePain),
+            extractString(input.payload.movementsExercisesPositionsAvoided),
+            yesExplanation(input.payload.physicalLimitationsAggravatedByExercise),
+            extractString(input.payload.knownDiagnoses),
+          ]
+            .filter(Boolean)
+            .join("; ") || undefined,
+        medicationFlags: summarizeMedications(input.payload.medications),
+        motivationStyle:
+          [
+            extractString(input.payload.motivation),
+            joinStrings(input.payload.preferredCoachingStyle),
+          ]
+            .filter(Boolean)
+            .join("; ") || undefined,
+        accountabilityPreference: joinStrings(input.payload.accountabilityPreference),
         internalTags: [
           "intake",
           input.payload.orchestrationMode ? `mode:${input.payload.orchestrationMode}` : undefined,
