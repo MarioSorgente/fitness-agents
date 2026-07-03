@@ -212,6 +212,8 @@ export class FirebaseCoachingRepository implements CoachingRepository {
       priority: input.priority ?? "normal",
       planImageUrls: input.planImageUrls ?? [],
       progressPhotoUrls: input.progressPhotoUrls ?? [],
+      currentPlanPhase: input.currentPlanPhase,
+      measurementsSummary: input.measurementsSummary,
       createdAt: now,
       updatedAt: now,
     });

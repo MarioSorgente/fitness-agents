@@ -785,3 +785,8 @@ button:disabled {
   color: var(--accent-dark);
   text-decoration: underline;
 }
+
+.success-text {
+  color: #15803d !important;
+  font-weight: 700;
+}

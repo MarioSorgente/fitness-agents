@@ -215,9 +215,7 @@ export default async function AdminClientsPage({ searchParams }: AdminClientsPag
                     <td>{safetyLabel(safetyStatus)}</td>
                     <td>{formatDate(profile.updatedAt)}</td>
                     <td>
-                      <Link href={`/admin/submissions/${profile.intakeSubmissionId}`}>
-                        Open client
-                      </Link>
+                      <Link href={`/admin/clients/${profile.id}`}>Open client</Link>
                     </td>
                   </tr>
                 ))}
