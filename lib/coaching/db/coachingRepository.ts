@@ -21,6 +21,29 @@ export type IntakeSubmission = {
 
 export type CoachingPlan = CoachingPlanRecord;
 
+export type ClientProfileStatus = "lead" | "active" | "paused" | "completed" | "archived";
+export type ClientProfilePriority = "low" | "normal" | "high" | "urgent";
+
+export type ClientProfile = {
+  id: string;
+  userId: string;
+  intakeSubmissionId: string;
+  fullName: string;
+  email: string;
+  phone?: string;
+  status: ClientProfileStatus;
+  startDate?: Date;
+  nextFollowUpDate?: Date;
+  checkInCadence?: string;
+  coachNotes?: string;
+  internalTags: string[];
+  priority: ClientProfilePriority;
+  planImageUrls: string[];
+  progressPhotoUrls: string[];
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 export type ReviewStatus = "not_started" | "in_review" | "approved" | "changes_requested";
 
 export type ReviewState = {
@@ -57,6 +80,42 @@ export type CreateIntakeSubmissionInput = {
   payload: CoachingIntake;
   submittedAt?: Date;
 };
+
+export type CreateClientProfileInput = {
+  id?: string;
+  userId: string;
+  intakeSubmissionId: string;
+  fullName: string;
+  email: string;
+  phone?: string;
+  status?: ClientProfileStatus;
+  startDate?: Date;
+  nextFollowUpDate?: Date;
+  checkInCadence?: string;
+  coachNotes?: string;
+  internalTags?: string[];
+  priority?: ClientProfilePriority;
+  planImageUrls?: string[];
+  progressPhotoUrls?: string[];
+};
+
+export type UpdateClientProfileInput = Partial<
+  Pick<
+    ClientProfile,
+    | "fullName"
+    | "email"
+    | "phone"
+    | "status"
+    | "startDate"
+    | "nextFollowUpDate"
+    | "checkInCadence"
+    | "coachNotes"
+    | "internalTags"
+    | "priority"
+    | "planImageUrls"
+    | "progressPhotoUrls"
+  >
+>;
 
 export type CreateCoachingPlanInput = {
   id?: string;
@@ -103,6 +162,12 @@ export interface CoachingRepository {
     id: string,
     updates: Partial<Pick<IntakeSubmission, "payload" | "status" | "submittedAt">>,
   ): Promise<IntakeSubmission>;
+
+  createClientProfile(input: CreateClientProfileInput): Promise<ClientProfile>;
+  getClientProfile(id: string): Promise<ClientProfile | null>;
+  getClientProfileBySubmissionId(intakeSubmissionId: string): Promise<ClientProfile | null>;
+  listClientProfiles(options: ListByUserOptions): Promise<ClientProfile[]>;
+  updateClientProfile(id: string, updates: UpdateClientProfileInput): Promise<ClientProfile>;
 
   createCoachingPlan(input: CreateCoachingPlanInput): Promise<CoachingPlan>;
   getCoachingPlan(id: string): Promise<CoachingPlan | null>;

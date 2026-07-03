@@ -26,6 +26,10 @@ function hashIdentifier(value: string): string {
   return createHash("sha256").update(value.toLowerCase().trim()).digest("hex").slice(0, 12);
 }
 
+function extractString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
 function withContext(error: unknown, message: string): Error {
   const wrapped = new Error(
     `${message}: ${error instanceof Error ? error.message : "unknown error"}`,
@@ -69,6 +73,26 @@ export async function POST(request: Request) {
       });
     } catch (error) {
       throw withContext(error, "Intake repository write failed");
+    }
+
+    try {
+      await repository.createClientProfile({
+        userId: input.userId,
+        intakeSubmissionId: submission.id,
+        fullName: input.payload.fullName,
+        email: input.payload.email,
+        phone: extractString(input.payload.phoneNumber),
+        status: "lead",
+        priority:
+          input.payload.safetyStatus === "medical_clearance_recommended" ? "high" : "normal",
+        internalTags: [
+          "intake",
+          input.payload.orchestrationMode ? `mode:${input.payload.orchestrationMode}` : undefined,
+          input.payload.safetyStatus ? `safety:${input.payload.safetyStatus}` : undefined,
+        ].filter((tag): tag is string => Boolean(tag)),
+      });
+    } catch (error) {
+      throw withContext(error, "Client profile repository write failed");
     }
 
     return NextResponse.json(

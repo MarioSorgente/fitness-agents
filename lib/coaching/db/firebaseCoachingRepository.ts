@@ -1,21 +1,25 @@
 import type { CollectionReference, DocumentData, Firestore, Query } from "firebase-admin/firestore";
 
 import {
+  type ClientProfile,
   type CoachingExport,
   type CoachingPlan,
   type CoachingRepository,
   type CreateCoachingExportInput,
   type CreateCoachingPlanInput,
   type CreateIntakeSubmissionInput,
+  type CreateClientProfileInput,
   type IntakeSubmission,
   type ListByUserOptions,
   type ReviewState,
+  type UpdateClientProfileInput,
   type UpsertReviewStateInput,
 } from "./coachingRepository";
 import { getFirebaseFirestore } from "./firebaseAdmin";
 
 const COLLECTIONS = {
   intakeSubmissions: "coaching_intake_submissions",
+  clientProfiles: "coaching_client_profiles",
   plans: "coaching_plans",
   reviewStates: "coaching_review_states",
   exports: "coaching_exports",
@@ -31,6 +35,12 @@ type StoredDocument = DocumentData & {
 type StoredIntakeSubmission = StoredDocument &
   Omit<IntakeSubmission, "createdAt" | "submittedAt" | "updatedAt"> & {
     submittedAt?: FirestoreDate;
+  };
+
+type StoredClientProfile = StoredDocument &
+  Omit<ClientProfile, "createdAt" | "nextFollowUpDate" | "startDate" | "updatedAt"> & {
+    nextFollowUpDate?: FirestoreDate;
+    startDate?: FirestoreDate;
   };
 
 type StoredCoachingPlan = StoredDocument &
@@ -69,6 +79,19 @@ function mapIntakeSubmission(data: StoredIntakeSubmission): IntakeSubmission {
     createdAt: toDate(data.createdAt) ?? new Date(0),
     updatedAt: toDate(data.updatedAt) ?? new Date(0),
     submittedAt: toDate(data.submittedAt),
+  };
+}
+
+function mapClientProfile(data: StoredClientProfile): ClientProfile {
+  return {
+    ...data,
+    internalTags: data.internalTags ?? [],
+    planImageUrls: data.planImageUrls ?? [],
+    progressPhotoUrls: data.progressPhotoUrls ?? [],
+    createdAt: toDate(data.createdAt) ?? new Date(0),
+    updatedAt: toDate(data.updatedAt) ?? new Date(0),
+    startDate: toDate(data.startDate),
+    nextFollowUpDate: toDate(data.nextFollowUpDate),
   };
 }
 
@@ -163,6 +186,75 @@ export class FirebaseCoachingRepository implements CoachingRepository {
     );
 
     return this.requireIntakeSubmission(id);
+  }
+
+  async createClientProfile(input: CreateClientProfileInput): Promise<ClientProfile> {
+    const existing = await this.getClientProfileBySubmissionId(input.intakeSubmissionId);
+    if (existing) {
+      return existing;
+    }
+
+    const now = new Date();
+    const ref = this.documentRef(this.clientProfiles(), input.id);
+    const data = stripUndefined({
+      id: ref.id,
+      userId: input.userId,
+      intakeSubmissionId: input.intakeSubmissionId,
+      fullName: input.fullName,
+      email: input.email,
+      phone: input.phone,
+      status: input.status ?? "lead",
+      startDate: toFirestoreDate(input.startDate),
+      nextFollowUpDate: toFirestoreDate(input.nextFollowUpDate),
+      checkInCadence: input.checkInCadence,
+      coachNotes: input.coachNotes,
+      internalTags: input.internalTags ?? [],
+      priority: input.priority ?? "normal",
+      planImageUrls: input.planImageUrls ?? [],
+      progressPhotoUrls: input.progressPhotoUrls ?? [],
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    await ref.set(data);
+
+    return mapClientProfile(data as StoredClientProfile);
+  }
+
+  async getClientProfile(id: string): Promise<ClientProfile | null> {
+    const snapshot = await this.clientProfiles().doc(id).get();
+
+    return snapshot.exists ? mapClientProfile(snapshot.data() as StoredClientProfile) : null;
+  }
+
+  async getClientProfileBySubmissionId(intakeSubmissionId: string): Promise<ClientProfile | null> {
+    const snapshot = await this.clientProfiles()
+      .where("intakeSubmissionId", "==", intakeSubmissionId)
+      .limit(1)
+      .get();
+    const [profile] = snapshot.docs;
+
+    return profile ? mapClientProfile(profile.data() as StoredClientProfile) : null;
+  }
+
+  async listClientProfiles(options: ListByUserOptions): Promise<ClientProfile[]> {
+    return listDocuments(this.byUser(this.clientProfiles(), options), (data) =>
+      mapClientProfile(data as StoredClientProfile),
+    );
+  }
+
+  async updateClientProfile(id: string, updates: UpdateClientProfileInput): Promise<ClientProfile> {
+    const ref = this.clientProfiles().doc(id);
+    await ref.update(
+      stripUndefined({
+        ...updates,
+        startDate: toFirestoreDate(updates.startDate),
+        nextFollowUpDate: toFirestoreDate(updates.nextFollowUpDate),
+        updatedAt: new Date(),
+      }),
+    );
+
+    return this.requireClientProfile(id);
   }
 
   async createCoachingPlan(input: CreateCoachingPlanInput): Promise<CoachingPlan> {
@@ -293,6 +385,10 @@ export class FirebaseCoachingRepository implements CoachingRepository {
     return this.db.collection(COLLECTIONS.intakeSubmissions);
   }
 
+  private clientProfiles(): CollectionReference<DocumentData> {
+    return this.db.collection(COLLECTIONS.clientProfiles);
+  }
+
   private plans(): CollectionReference<DocumentData> {
     return this.db.collection(COLLECTIONS.plans);
   }
@@ -327,6 +423,16 @@ export class FirebaseCoachingRepository implements CoachingRepository {
 
     if (!record) {
       throw new Error(`Intake submission ${id} does not exist.`);
+    }
+
+    return record;
+  }
+
+  private async requireClientProfile(id: string): Promise<ClientProfile> {
+    const record = await this.getClientProfile(id);
+
+    if (!record) {
+      throw new Error(`Client profile ${id} does not exist.`);
     }
 
     return record;
