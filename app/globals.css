@@ -747,3 +747,41 @@ button:disabled {
 .markdown-preview a {
   color: var(--accent);
 }
+
+.filter-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.filter-tab {
+  background: #f8fafc;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--foreground);
+  padding: 0.65rem 0.9rem;
+  text-decoration: none;
+}
+
+.filter-tab.active {
+  background: #dbeafe;
+  border-color: #93c5fd;
+  color: var(--accent-dark);
+}
+
+.admin-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+}
+
+.admin-nav a {
+  color: var(--foreground);
+  font-size: 0.9rem;
+  text-decoration: none;
+}
+
+.admin-nav a:hover {
+  color: var(--accent-dark);
+  text-decoration: underline;
+}

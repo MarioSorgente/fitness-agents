@@ -309,6 +309,13 @@ export class LocalFileCoachingRepository implements CoachingRepository {
     return limitResults(sortByCreatedAtDesc(profiles), options.limit);
   }
 
+  async listAllClientProfiles(limit?: number): Promise<ClientProfile[]> {
+    const store = await this.loadStore();
+    const profiles = Object.values(store.clientProfiles).map(hydrateClientProfile);
+
+    return limitResults(sortByCreatedAtDesc(profiles), limit);
+  }
+
   async updateClientProfile(id: string, updates: UpdateClientProfileInput): Promise<ClientProfile> {
     return this.updateStore((store) => {
       const existing = store.clientProfiles[id];

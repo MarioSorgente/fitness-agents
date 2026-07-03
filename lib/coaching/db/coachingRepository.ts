@@ -167,6 +167,8 @@ export interface CoachingRepository {
   getClientProfile(id: string): Promise<ClientProfile | null>;
   getClientProfileBySubmissionId(intakeSubmissionId: string): Promise<ClientProfile | null>;
   listClientProfiles(options: ListByUserOptions): Promise<ClientProfile[]>;
+  // Admin-facing: every client profile across all users, newest first.
+  listAllClientProfiles(limit?: number): Promise<ClientProfile[]>;
   updateClientProfile(id: string, updates: UpdateClientProfileInput): Promise<ClientProfile>;
 
   createCoachingPlan(input: CreateCoachingPlanInput): Promise<CoachingPlan>;
