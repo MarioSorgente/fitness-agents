@@ -6,6 +6,7 @@ import type { ClientProfile, IntakeSubmission } from "@/lib/coaching/db/coaching
 
 import { IntakeSnapshot, field, humanize, joinList } from "../../submissions/IntakeSnapshot";
 import { SubmissionWorkflow } from "../../submissions/SubmissionWorkflow";
+import { ClientAssetManager } from "./ClientAssetManager";
 import { ClientCrmForm } from "./ClientCrmForm";
 
 export const dynamic = "force-dynamic";
@@ -215,6 +216,12 @@ export default async function AdminClientDetailPage({ params }: AdminClientDetai
           <p className="muted-copy">The original intake submission could not be found.</p>
         </section>
       )}
+
+      <ClientAssetManager
+        clientId={profile.id}
+        initialPlanImages={profile.planImages}
+        initialProgressPhotos={profile.progressPhotos}
+      />
 
       <ClientCrmForm profile={profile} />
 
