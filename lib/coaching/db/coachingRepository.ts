@@ -40,6 +40,8 @@ export type ClientProfile = {
   priority: ClientProfilePriority;
   planImageUrls: string[];
   progressPhotoUrls: string[];
+  currentPlanPhase?: string;
+  measurementsSummary?: string;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -97,6 +99,8 @@ export type CreateClientProfileInput = {
   priority?: ClientProfilePriority;
   planImageUrls?: string[];
   progressPhotoUrls?: string[];
+  currentPlanPhase?: string;
+  measurementsSummary?: string;
 };
 
 export type UpdateClientProfileInput = Partial<
@@ -114,6 +118,8 @@ export type UpdateClientProfileInput = Partial<
     | "priority"
     | "planImageUrls"
     | "progressPhotoUrls"
+    | "currentPlanPhase"
+    | "measurementsSummary"
   >
 >;
 

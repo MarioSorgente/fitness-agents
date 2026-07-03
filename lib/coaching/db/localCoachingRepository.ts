@@ -275,6 +275,8 @@ export class LocalFileCoachingRepository implements CoachingRepository {
         priority: input.priority ?? "normal",
         planImageUrls: input.planImageUrls ?? [],
         progressPhotoUrls: input.progressPhotoUrls ?? [],
+        ...withOptional("currentPlanPhase", input.currentPlanPhase),
+        ...withOptional("measurementsSummary", input.measurementsSummary),
         createdAt: now,
         updatedAt: now,
       };

@@ -3,8 +3,7 @@ import Link from "next/link";
 import { requireAdminPage } from "@/lib/coaching/auth/adminAuth";
 import { createCoachingRepository } from "@/lib/coaching/db/coachingRepositoryFactory";
 import type { IntakeSubmission } from "@/lib/coaching/db/coachingRepository";
-import type { CompactClientProfile } from "@/lib/coaching/schemas/intakeSchema";
-
+import { IntakeSnapshot, field } from "../IntakeSnapshot";
 import { SubmissionWorkflow } from "../SubmissionWorkflow";
 
 export const dynamic = "force-dynamic";
@@ -12,23 +11,6 @@ export const dynamic = "force-dynamic";
 type SubmissionDetailPageProps = {
   params: Promise<{ id: string }>;
 };
-
-function field(payload: Record<string, unknown>, key: string): string {
-  const value = payload[key];
-  return typeof value === "string" ? value : value == null ? "" : String(value);
-}
-
-function humanize(value: unknown): string {
-  if (typeof value !== "string" || !value.trim()) return "—";
-  const spaced = value.replace(/_/g, " ").trim();
-  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
-}
-
-function joinList(value: unknown): string {
-  if (!Array.isArray(value)) return "—";
-  const items = value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
-  return items.length > 0 ? items.map(humanize).join(", ") : "—";
-}
 
 async function loadDetail(id: string): Promise<{
   submission?: IntakeSubmission;
@@ -97,8 +79,7 @@ export default async function AdminSubmissionDetailPage({ params }: SubmissionDe
   }
 
   const payload = submission.payload as unknown as Record<string, unknown>;
-  const profile = (payload.clientProfile as CompactClientProfile | undefined) ?? undefined;
-  const name = field(payload, "fullName") || profile?.name || "Unnamed client";
+  const name = field(payload, "fullName") || "Unnamed client";
 
   return (
     <main className="page-shell">
@@ -119,35 +100,7 @@ export default async function AdminSubmissionDetailPage({ params }: SubmissionDe
         </div>
       </section>
 
-      <section className="card stack">
-        <h2>Client snapshot</h2>
-        <dl className="detail-list">
-          <div>
-            <dt>Primary goal</dt>
-            <dd>{humanize(field(payload, "mainGoal"))}</dd>
-          </div>
-          <div>
-            <dt>Goal detail</dt>
-            <dd>{field(payload, "specificGoalDescription") || "—"}</dd>
-          </div>
-          <div>
-            <dt>Training level</dt>
-            <dd>{humanize(field(payload, "trainingLevel"))}</dd>
-          </div>
-          <div>
-            <dt>Availability</dt>
-            <dd>{profile?.availability || "—"}</dd>
-          </div>
-          <div>
-            <dt>Equipment</dt>
-            <dd>{joinList(payload.equipmentAvailable)}</dd>
-          </div>
-          <div>
-            <dt>Safety status</dt>
-            <dd>{humanize(field(payload, "safetyStatus"))}</dd>
-          </div>
-        </dl>
-      </section>
+      <IntakeSnapshot payload={payload} />
 
       <SubmissionWorkflow
         submissionId={submission.id}
