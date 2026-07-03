@@ -4,15 +4,18 @@ import os from "node:os";
 import path from "node:path";
 
 import type {
+  ClientProfile,
   CoachingExport,
   CoachingPlan,
   CoachingRepository,
   CreateCoachingExportInput,
   CreateCoachingPlanInput,
   CreateIntakeSubmissionInput,
+  CreateClientProfileInput,
   IntakeSubmission,
   ListByUserOptions,
   ReviewState,
+  UpdateClientProfileInput,
   UpsertReviewStateInput,
 } from "./coachingRepository";
 
@@ -27,6 +30,7 @@ type Serialized = Record<string, unknown>;
 
 type LocalStore = {
   intakeSubmissions: Record<string, Serialized>;
+  clientProfiles: Record<string, Serialized>;
   coachingPlans: Record<string, Serialized>;
   reviewStates: Record<string, Serialized>;
   coachingExports: Record<string, Serialized>;
@@ -47,6 +51,7 @@ function cloneStore(store: LocalStore): LocalStore {
 function emptyStore(): LocalStore {
   return {
     intakeSubmissions: {},
+    clientProfiles: {},
     coachingPlans: {},
     reviewStates: {},
     coachingExports: {},
@@ -92,6 +97,29 @@ function hydrateIntakeSubmission(submission: Serialized): IntakeSubmission {
     updatedAt: dateFrom(submission.updatedAt) ?? new Date(0),
     submittedAt: dateFrom(submission.submittedAt),
   } as IntakeSubmission;
+}
+
+function serializeClientProfile(profile: ClientProfile): Serialized {
+  return {
+    ...profile,
+    createdAt: profile.createdAt.toISOString(),
+    updatedAt: profile.updatedAt.toISOString(),
+    ...withOptional("startDate", serializeDate(profile.startDate)),
+    ...withOptional("nextFollowUpDate", serializeDate(profile.nextFollowUpDate)),
+  };
+}
+
+function hydrateClientProfile(profile: Serialized): ClientProfile {
+  return {
+    ...profile,
+    internalTags: Array.isArray(profile.internalTags) ? profile.internalTags : [],
+    planImageUrls: Array.isArray(profile.planImageUrls) ? profile.planImageUrls : [],
+    progressPhotoUrls: Array.isArray(profile.progressPhotoUrls) ? profile.progressPhotoUrls : [],
+    createdAt: dateFrom(profile.createdAt) ?? new Date(0),
+    updatedAt: dateFrom(profile.updatedAt) ?? new Date(0),
+    startDate: dateFrom(profile.startDate),
+    nextFollowUpDate: dateFrom(profile.nextFollowUpDate),
+  } as ClientProfile;
 }
 
 function serializeCoachingPlan(plan: CoachingPlan): Serialized {
@@ -217,6 +245,83 @@ export class LocalFileCoachingRepository implements CoachingRepository {
         updatedAt: new Date(),
       };
       store.intakeSubmissions[id] = serializeIntakeSubmission(updated);
+      return updated;
+    });
+  }
+
+  async createClientProfile(input: CreateClientProfileInput): Promise<ClientProfile> {
+    return this.updateStore((store) => {
+      const now = new Date();
+      const existing = Object.values(store.clientProfiles)
+        .map(hydrateClientProfile)
+        .find((profile) => profile.intakeSubmissionId === input.intakeSubmissionId);
+      if (existing) {
+        return existing;
+      }
+
+      const profile: ClientProfile = {
+        id: input.id ?? randomUUID(),
+        userId: input.userId,
+        intakeSubmissionId: input.intakeSubmissionId,
+        fullName: input.fullName,
+        email: input.email,
+        ...withOptional("phone", input.phone),
+        status: input.status ?? "lead",
+        ...withOptional("startDate", input.startDate),
+        ...withOptional("nextFollowUpDate", input.nextFollowUpDate),
+        ...withOptional("checkInCadence", input.checkInCadence),
+        ...withOptional("coachNotes", input.coachNotes),
+        internalTags: input.internalTags ?? [],
+        priority: input.priority ?? "normal",
+        planImageUrls: input.planImageUrls ?? [],
+        progressPhotoUrls: input.progressPhotoUrls ?? [],
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      store.clientProfiles[profile.id] = serializeClientProfile(profile);
+      return profile;
+    });
+  }
+
+  async getClientProfile(id: string): Promise<ClientProfile | null> {
+    const store = await this.loadStore();
+    const profile = store.clientProfiles[id];
+
+    return profile ? hydrateClientProfile(profile) : null;
+  }
+
+  async getClientProfileBySubmissionId(intakeSubmissionId: string): Promise<ClientProfile | null> {
+    const store = await this.loadStore();
+    const profile = Object.values(store.clientProfiles)
+      .map(hydrateClientProfile)
+      .find((candidate) => candidate.intakeSubmissionId === intakeSubmissionId);
+
+    return profile ?? null;
+  }
+
+  async listClientProfiles(options: ListByUserOptions): Promise<ClientProfile[]> {
+    const store = await this.loadStore();
+    const profiles = Object.values(store.clientProfiles)
+      .map(hydrateClientProfile)
+      .filter((profile) => profile.userId === options.userId);
+
+    return limitResults(sortByCreatedAtDesc(profiles), options.limit);
+  }
+
+  async updateClientProfile(id: string, updates: UpdateClientProfileInput): Promise<ClientProfile> {
+    return this.updateStore((store) => {
+      const existing = store.clientProfiles[id];
+      if (!existing) {
+        throw new Error(`Client profile ${id} does not exist.`);
+      }
+
+      const updated = {
+        ...hydrateClientProfile(existing),
+        ...updates,
+        updatedAt: new Date(),
+      } as ClientProfile;
+      store.clientProfiles[id] = serializeClientProfile(updated);
       return updated;
     });
   }
