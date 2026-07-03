@@ -243,6 +243,15 @@ export class FirebaseCoachingRepository implements CoachingRepository {
     );
   }
 
+  async listAllClientProfiles(limit?: number): Promise<ClientProfile[]> {
+    let query: Query<DocumentData> = this.clientProfiles().orderBy("createdAt", "desc");
+    if (limit) {
+      query = query.limit(limit);
+    }
+
+    return listDocuments(query, (data) => mapClientProfile(data as StoredClientProfile));
+  }
+
   async updateClientProfile(id: string, updates: UpdateClientProfileInput): Promise<ClientProfile> {
     const ref = this.clientProfiles().doc(id);
     await ref.update(
