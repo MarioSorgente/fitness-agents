@@ -15,22 +15,10 @@ function hasFirebaseServiceAccount(): boolean {
   return Boolean(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
 }
 
-function hasPartialFirebaseServiceAccount(): boolean {
-  return Boolean(process.env.FIREBASE_SERVICE_ACCOUNT_KEY?.trim());
-}
-
 function hasFirebaseIndividualCredentials(): boolean {
   return Boolean(
     process.env.FIREBASE_PROJECT_ID &&
       process.env.FIREBASE_CLIENT_EMAIL &&
-      process.env.FIREBASE_PRIVATE_KEY,
-  );
-}
-
-function hasPartialFirebaseIndividualCredentials(): boolean {
-  return Boolean(
-    process.env.FIREBASE_PROJECT_ID ||
-      process.env.FIREBASE_CLIENT_EMAIL ||
       process.env.FIREBASE_PRIVATE_KEY,
   );
 }

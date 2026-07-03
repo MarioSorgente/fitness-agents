@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useRef, useState, type ChangeEvent, type DragEvent } from "react";
 
 import type { ClientAsset } from "@/lib/coaching/db/coachingRepository";
@@ -160,7 +161,7 @@ export function ClientAssetManager({
         {assets.length ? (
           assets.map((asset) => (
             <article className="asset-card" key={asset.id}>
-              <img src={asset.url} alt={asset.label} />
+              <Image src={asset.url} alt={asset.label} width={480} height={360} unoptimized />
               <div className="stack compact-stack">
                 <strong>{asset.label}</strong>
                 <span className="muted-copy">Uploaded {formatDate(asset.uploadedAt)}</span>

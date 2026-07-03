@@ -25,7 +25,7 @@ const MAX_FILE_SIZE_BYTES = 8 * 1024 * 1024;
 const LOCAL_UPLOAD_ROOT =
   process.env.COACHING_LOCAL_UPLOAD_DIR ?? path.join(process.cwd(), ".data", "uploads");
 
-function useFirebaseStorage(): boolean {
+function shouldUseFirebaseStorage(): boolean {
   return Boolean(
     process.env.COACHING_STORAGE_BACKEND === "firebase" ||
       process.env.FIREBASE_STORAGE_BUCKET ||
@@ -84,7 +84,7 @@ export async function uploadClientAsset(input: UploadClientAssetInput): Promise<
   const storagePath = buildStoragePath(input.clientId, input.kind, input.file, id);
   const uploadedAt = new Date();
 
-  if (useFirebaseStorage()) {
+  if (shouldUseFirebaseStorage()) {
     const bucket = await firebaseBucket();
     await bucket.file(storagePath).save(await fileBuffer(input.file), {
       contentType: input.file.type,
@@ -106,7 +106,7 @@ export async function uploadClientAsset(input: UploadClientAssetInput): Promise<
 }
 
 export async function deleteClientAsset(storagePath: string): Promise<void> {
-  if (useFirebaseStorage()) {
+  if (shouldUseFirebaseStorage()) {
     const bucket = await firebaseBucket();
     await bucket.file(storagePath).delete({ ignoreNotFound: true });
     return;
@@ -120,7 +120,7 @@ export async function getClientAssetUrl(clientId: string, assetId: string): Prom
 }
 
 export async function readClientAsset(storagePath: string): Promise<Buffer> {
-  if (useFirebaseStorage()) {
+  if (shouldUseFirebaseStorage()) {
     const bucket = await firebaseBucket();
     const [contents] = await bucket.file(storagePath).download();
     return contents;

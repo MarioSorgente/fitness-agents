@@ -2,9 +2,10 @@ import Link from "next/link";
 
 import { requireAdminPage } from "@/lib/coaching/auth/adminAuth";
 import { createCoachingRepository } from "@/lib/coaching/db/coachingRepositoryFactory";
-import type { IntakeSubmission } from "@/lib/coaching/db/coachingRepository";
+import type { ClientProfile, IntakeSubmission } from "@/lib/coaching/db/coachingRepository";
 import { IntakeSnapshot, field } from "../IntakeSnapshot";
 import { SubmissionWorkflow } from "../SubmissionWorkflow";
+import { connectSubmissionToCrm } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -16,12 +17,15 @@ async function loadDetail(id: string): Promise<{
   submission?: IntakeSubmission;
   initialPlanId?: string;
   initialMarkdown?: string;
+  crmProfile?: ClientProfile;
   error?: string;
 }> {
   try {
     const repository = createCoachingRepository();
     const submission = await repository.getIntakeSubmission(id);
     if (!submission) return {};
+
+    const crmProfile = await repository.getClientProfileBySubmissionId(submission.id);
 
     let initialPlanId: string | undefined;
     let initialMarkdown: string | undefined;
@@ -39,7 +43,7 @@ async function loadDetail(id: string): Promise<{
       // Plan lookup is best-effort; a missing draft just means "Generate" starts fresh.
     }
 
-    return { submission, initialPlanId, initialMarkdown };
+    return { submission, crmProfile: crmProfile ?? undefined, initialPlanId, initialMarkdown };
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Failed to load submission." };
   }
@@ -48,7 +52,7 @@ async function loadDetail(id: string): Promise<{
 export default async function AdminSubmissionDetailPage({ params }: SubmissionDetailPageProps) {
   const { id } = await params;
   await requireAdminPage(`/admin/submissions/${id}`);
-  const { submission, initialPlanId, initialMarkdown, error } = await loadDetail(id);
+  const { submission, crmProfile, initialPlanId, initialMarkdown, error } = await loadDetail(id);
 
   if (error) {
     return (
@@ -93,10 +97,21 @@ export default async function AdminSubmissionDetailPage({ params }: SubmissionDe
         <p className="eyebrow">Submission {submission.id}</p>
         <h1>{name}</h1>
         <p>{field(payload, "email") || "No email provided"}</p>
-        <div>
+        <div className="button-row">
           <Link className="secondary-link" href="/admin/submissions">
             ← Back to submissions
           </Link>
+          {crmProfile ? (
+            <Link className="secondary-link" href={`/admin/clients/${crmProfile.id}`}>
+              Open CRM profile
+            </Link>
+          ) : (
+            <form action={connectSubmissionToCrm.bind(null, submission.id)}>
+              <button className="secondary-button" type="submit">
+                Connect to CRM
+              </button>
+            </form>
+          )}
         </div>
       </section>
 
